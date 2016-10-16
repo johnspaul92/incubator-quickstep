@@ -115,6 +115,10 @@ class AggregationHandle {
    **/
   virtual AggregationState* createInitialState() const = 0;
 
+  virtual std::size_t getStateSize() const {
+    return 0;
+  }
+
   /**
    * @brief Create a new HashTable for aggregation with GROUP BY.
    *

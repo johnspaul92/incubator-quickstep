@@ -103,6 +103,10 @@ class NullType : public Type {
     return false;
   }
 
+  bool canCheckEqualityWithMemcmp() const override {
+    return true;
+  }
+
  private:
   // NOTE(chasseur): NullType requires 0 bytes of inherent storage. It does,
   // however, require a bit in NULL bitmaps.

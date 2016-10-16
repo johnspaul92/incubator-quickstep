@@ -27,6 +27,7 @@
 
 #include "expressions/aggregation/AggregationHandle.hpp"
 #include "storage/HashTableBase.hpp"
+#include "storage/AggregationHashTable.hpp"
 #include "storage/FastHashTable.hpp"
 #include "storage/FastHashTableFactory.hpp"
 #include "threading/SpinMutex.hpp"
@@ -178,6 +179,17 @@ class HashTablePool {
     return &hash_tables_;
   }
 
+  AggregationHashTableBase* createNewThreadPrivateHashTable() {
+    agg_hash_tables_.emplace_back(
+        std::unique_ptr<AggregationHashTableBase>(
+            new ThreadPrivateAggregationHashTable(
+               group_by_types_,
+               estimated_num_entries_,
+               handles_,
+               storage_manager_)));
+    return agg_hash_tables_.back().get();
+  }
+
  private:
   AggregationStateHashTableBase* createNewHashTable() {
     return agg_handle_->createGroupByHashTable(hash_table_impl_type_,
@@ -209,6 +221,7 @@ class HashTablePool {
   static constexpr std::size_t kEstimateReductionFactor = 100;
 
   std::vector<std::unique_ptr<AggregationStateHashTableBase>> hash_tables_;
+  std::vector<std::unique_ptr<AggregationHashTableBase>> agg_hash_tables_;
 
   const std::size_t estimated_num_entries_;
   const HashTableImplType hash_table_impl_type_;

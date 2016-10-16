@@ -114,6 +114,14 @@ class DatetimeIntervalType : public Type {
   bool parseValueFromString(const std::string &value_string,
                             TypedValue *value) const override;
 
+  bool canCheckEqualityWithMemcmp() const override {
+    return true;
+  }
+
+  inline std::size_t getHash(const void *value_ptr) const {
+    return *reinterpret_cast<const DatetimeIntervalLit::cpptype *>(value_ptr);
+  }
+
  private:
   explicit DatetimeIntervalType(const bool nullable)
       : Type(Type::kOther, kDatetimeInterval, nullable, sizeof(DatetimeIntervalLit), sizeof(DatetimeIntervalLit)) {

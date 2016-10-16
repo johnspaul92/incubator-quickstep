@@ -38,6 +38,7 @@
 #include "expressions/aggregation/AggregationID.hpp"
 #include "expressions/predicate/Predicate.hpp"
 #include "expressions/scalar/Scalar.hpp"
+#include "storage/AggregationHashTable.hpp"
 #include "storage/AggregationOperationState.pb.h"
 #include "storage/HashTable.hpp"
 #include "storage/HashTableBase.hpp"
@@ -46,6 +47,7 @@
 #include "storage/StorageBlock.hpp"
 #include "storage/StorageBlockInfo.hpp"
 #include "storage/StorageManager.hpp"
+#include "types/TypeFunctors.hpp"
 #include "types/TypedValue.hpp"
 #include "types/containers/ColumnVector.hpp"
 #include "types/containers/ColumnVectorsValueAccessor.hpp"
@@ -446,10 +448,13 @@ void AggregationOperationState::aggregateBlockHashTable(
   AggregationStateHashTableBase *agg_hash_table =
       group_by_hashtable_pool_->getHashTableFast();
   DCHECK(agg_hash_table != nullptr);
+
   block->aggregateGroupBy(arguments_,
                           group_by_list_,
                           predicate_.get(),
                           agg_hash_table,
+                          group_by_hashtable_pool_->createNewThreadPrivateHashTable(),
+//                          nullptr,
                           &reuse_matches,
                           &reuse_group_by_vectors);
   group_by_hashtable_pool_->returnHashTable(agg_hash_table);

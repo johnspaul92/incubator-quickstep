@@ -419,6 +419,7 @@ void StorageBlock::aggregateGroupBy(
     const std::vector<std::unique_ptr<const Scalar>> &group_by,
     const Predicate *predicate,
     AggregationStateHashTableBase *hash_table,
+    AggregationHashTableBase *tp_hash_table,
     std::unique_ptr<TupleIdSequence> *reuse_matches,
     std::vector<std::unique_ptr<ColumnVector>> *reuse_group_by_vectors) const {
   DCHECK_GT(group_by.size(), 0u)
@@ -495,6 +496,22 @@ void StorageBlock::aggregateGroupBy(
                                                   &temp_result,
                                                   key_ids,
                                                   true);
+
+  // NOTE: experiments here
+  if (tp_hash_table != nullptr) {
+    if (key_ids.size() == 1) {
+      tp_hash_table->upsertValueAccessor(&temp_result,
+                                         key_ids.front(),
+                                         argument_ids,
+                                         true);
+    } else {
+      tp_hash_table->upsertValueAccessorCompositeKey(&temp_result,
+                                                     key_ids,
+                                                     argument_ids,
+                                                     true);
+    }
+    tp_hash_table->print();
+  }
 }
 
 

@@ -463,6 +463,7 @@ class StorageBlock : public StorageBlockBase {
       const std::vector<std::unique_ptr<const Scalar>> &group_by,
       const Predicate *predicate,
       AggregationStateHashTableBase *hash_table,
+      AggregationHashTableBase *tp_hash_table,
       std::unique_ptr<TupleIdSequence> *reuse_matches,
       std::vector<std::unique_ptr<ColumnVector>> *reuse_group_by_vectors) const;
 

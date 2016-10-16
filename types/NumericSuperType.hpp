@@ -56,6 +56,14 @@ class NumericSuperType : public Type {
     return TypedValue(static_cast<CppType>(0));
   }
 
+  bool canCheckEqualityWithMemcmp() const override {
+    return true;
+  }
+
+  inline std::size_t getHash(const void *value_ptr) const {
+    return *reinterpret_cast<const CppType *>(value_ptr);
+  }
+
  protected:
   NumericSuperType(const TypeID type_id, const bool nullable)
       : Type(Type::kNumeric, type_id, nullable, sizeof(CppType), sizeof(CppType)) {

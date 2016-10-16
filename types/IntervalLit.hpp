@@ -37,6 +37,8 @@ namespace quickstep {
  * @brief A literal representing the datetime interval.
  **/
 struct DatetimeIntervalLit {
+  typedef std::int64_t cpptype;
+
   std::int64_t interval_ticks;
 
   static constexpr std::int64_t kTicksPerSecond = INT64_C(1000000);
@@ -121,6 +123,8 @@ struct DatetimeIntervalLit {
  * @brief A literal representing the year-month interval.
  **/
 struct YearMonthIntervalLit {
+  typedef std::int64_t cpptype;
+
   std::int64_t months;
 
   // The maximum number of characters needed to print out a DatetimeInterval in

@@ -174,6 +174,7 @@ add_library(quickstep_utility_ExecutionDAGVisualizer
             ExecutionDAGVisualizer.hpp)
 add_library(quickstep_utility_Glob Glob.cpp Glob.hpp)
 add_library(quickstep_utility_HashPair ../empty_src.cpp HashPair.hpp)
+add_library(quickstep_utility_InlineMemcpy ../empty_src.cpp InlineMemcpy.hpp)
 add_library(quickstep_utility_Macros ../empty_src.cpp Macros.hpp)
 add_library(quickstep_utility_MemStream ../empty_src.cpp MemStream.hpp)
 add_library(quickstep_utility_PlanVisualizer PlanVisualizer.cpp PlanVisualizer.hpp)
@@ -323,6 +324,7 @@ target_link_libraries(quickstep_utility
                       quickstep_utility_ExecutionDAGVisualizer
                       quickstep_utility_Glob
                       quickstep_utility_HashPair
+                      quickstep_utility_InlineMemcpy
                       quickstep_utility_Macros
                       quickstep_utility_MemStream
                       quickstep_utility_PlanVisualizer

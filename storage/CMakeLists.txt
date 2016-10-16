@@ -145,6 +145,7 @@ if (ENABLE_DISTRIBUTED)
 endif()
 
 # Declare micro-libs:
+add_library(quickstep_storage_AggregationHashTable ../empty_src.cpp AggregationHashTable.hpp)
 add_library(quickstep_storage_AggregationOperationState
             AggregationOperationState.cpp
             AggregationOperationState.hpp)
@@ -217,6 +218,7 @@ add_library(quickstep_storage_HashTableBase ../empty_src.cpp HashTableBase.hpp)
 add_library(quickstep_storage_HashTableFactory HashTableFactory.cpp HashTableFactory.hpp)
 add_library(quickstep_storage_HashTableKeyManager ../empty_src.cpp HashTableKeyManager.hpp)
 add_library(quickstep_storage_HashTablePool ../empty_src.cpp HashTablePool.hpp)
+add_library(quickstep_storage_HashTableUntypedKeyManager ../empty_src.cpp HashTableUntypedKeyManager.hpp)
 add_library(quickstep_storage_IndexSubBlock ../empty_src.cpp IndexSubBlock.hpp)
 add_library(quickstep_storage_IndexSubBlockDescriptionFactory ../empty_src.cpp IndexSubBlockDescriptionFactory.hpp)
 add_library(quickstep_storage_InsertDestination InsertDestination.cpp InsertDestination.hpp)
@@ -269,6 +271,27 @@ add_library(quickstep_storage_WindowAggregationOperationState_proto ${storage_Wi
 
 
 # Link dependencies:
+target_link_libraries(quickstep_storage_AggregationHashTable
+                      quickstep_catalog_CatalogTypedefs
+                      quickstep_expressions_aggregation_AggregationHandle
+                      quickstep_storage_HashTableBase
+                      quickstep_storage_HashTableUntypedKeyManager
+                      quickstep_storage_StorageBlob
+                      quickstep_storage_StorageBlockInfo
+                      quickstep_storage_StorageConstants
+                      quickstep_storage_StorageManager
+                      quickstep_storage_TupleReference
+                      quickstep_storage_ValueAccessor
+                      quickstep_storage_ValueAccessorUtil
+                      quickstep_threading_SpinMutex
+                      quickstep_threading_SpinSharedMutex
+                      quickstep_types_Type
+                      quickstep_types_TypeFunctors
+                      quickstep_types_TypedValue
+                      quickstep_utility_Alignment
+                      quickstep_utility_HashPair
+                      quickstep_utility_Macros
+                      quickstep_utility_PrimeNumber)
 target_link_libraries(quickstep_storage_AggregationOperationState
                       glog
                       quickstep_catalog_CatalogDatabaseLite
@@ -283,6 +306,7 @@ target_link_libraries(quickstep_storage_AggregationOperationState
                       quickstep_expressions_aggregation_AggregationID
                       quickstep_expressions_predicate_Predicate
                       quickstep_expressions_scalar_Scalar
+                      quickstep_storage_AggregationHashTable
                       quickstep_storage_AggregationOperationState_proto
                       quickstep_storage_HashTable
                       quickstep_storage_HashTableBase
@@ -292,6 +316,7 @@ target_link_libraries(quickstep_storage_AggregationOperationState
                       quickstep_storage_StorageBlock
                       quickstep_storage_StorageBlockInfo
                       quickstep_storage_StorageManager
+                      quickstep_types_TypeFunctors
                       quickstep_types_TypedValue
                       quickstep_types_containers_ColumnVector
                       quickstep_types_containers_ColumnVectorsValueAccessor
@@ -761,12 +786,20 @@ target_link_libraries(quickstep_storage_HashTableKeyManager
 target_link_libraries(quickstep_storage_HashTablePool
                       glog
                       quickstep_expressions_aggregation_AggregationHandle
+                      quickstep_storage_AggregationHashTable
                       quickstep_storage_FastHashTable
                       quickstep_storage_FastHashTableFactory
                       quickstep_storage_HashTableBase
                       quickstep_threading_SpinMutex
                       quickstep_utility_Macros
                       quickstep_utility_StringUtil)
+target_link_libraries(quickstep_storage_HashTableUntypedKeyManager
+                      glog
+                      quickstep_storage_StorageConstants
+                      quickstep_types_Type
+                      quickstep_types_TypeFunctors
+                      quickstep_types_TypedValue
+                      quickstep_utility_Macros)
 target_link_libraries(quickstep_storage_IndexSubBlock
                       quickstep_catalog_CatalogTypedefs
                       quickstep_expressions_predicate_PredicateCost
@@ -1132,6 +1165,7 @@ target_link_libraries(quickstep_storage_WindowAggregationOperationState_proto
 # Module all-in-one library:
 add_library(quickstep_storage ../empty_src.cpp StorageModule.hpp)
 target_link_libraries(quickstep_storage
+                      quickstep_storage_AggregationHashTable
                       quickstep_storage_AggregationOperationState
                       quickstep_storage_AggregationOperationState_proto
                       quickstep_storage_BasicColumnStoreTupleStorageSubBlock
@@ -1159,6 +1193,7 @@ target_link_libraries(quickstep_storage
                       quickstep_storage_HashTableFactory
                       quickstep_storage_HashTableKeyManager
                       quickstep_storage_HashTablePool
+                      quickstep_storage_HashTableUntypedKeyManager
                       quickstep_storage_IndexSubBlock
                       quickstep_storage_IndexSubBlockDescriptionFactory
                       quickstep_storage_InsertDestination

@@ -122,6 +122,14 @@ class DateType : public Type {
   bool parseValueFromString(const std::string &value_string,
                             TypedValue *value) const override;
 
+  bool canCheckEqualityWithMemcmp() const override {
+    return true;
+  }
+
+  inline std::size_t getHash(const void *value_ptr) const {
+    return DateLit::getHash(reinterpret_cast<const DateLit *>(value_ptr));
+  }
+
  private:
   explicit DateType(const bool nullable)
       : Type(Type::kOther, kDate, nullable, sizeof(DateLit), sizeof(DateLit)) {

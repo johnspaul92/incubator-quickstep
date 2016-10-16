@@ -99,12 +99,20 @@ struct DateLit {
   inline std::int32_t monthField() const {
     return static_cast<std::int32_t>(month);
   }
+
+  static inline std::size_t getHash(const DateLit *date_lit) {
+    return static_cast<std::uint64_t>(date_lit->year) << 16
+        | static_cast<std::uint64_t>(date_lit->month) << 8
+        | static_cast<std::uint64_t>(date_lit->day);
+  }
 };
 
 /**
  * @brief A literal representing the datetime.
  **/
 struct DatetimeLit {
+  typedef std::int64_t cpptype;
+
   std::int64_t ticks;  // Ticks in GMT.
 
   static constexpr std::int64_t kTicksPerSecond = INT64_C(1000000);

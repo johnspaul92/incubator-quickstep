@@ -108,6 +108,25 @@ class HashTableBase {
 
 typedef HashTableBase<true, false, true, false> AggregationStateHashTableBase;
 
+class AggregationHashTableBase {
+ public:
+  virtual bool upsertValueAccessor(ValueAccessor *accessor,
+                                   const attribute_id key_attr_id,
+                                   const std::vector<attribute_id> &argument_ids,
+                                   const bool check_for_null_keys) = 0;
+
+  virtual bool upsertValueAccessorCompositeKey(ValueAccessor *accessor,
+                                               const std::vector<attribute_id> &key_attr_ids,
+                                               const std::vector<attribute_id> &argument_ids,
+                                               const bool check_for_null_keys) = 0;
+
+  virtual void print() const = 0;
+
+ protected:
+  AggregationHashTableBase() {}
+};
+
+
 /** @} */
 
 }  // namespace quickstep
