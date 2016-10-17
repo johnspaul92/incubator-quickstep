@@ -21,6 +21,7 @@
 #define QUICKSTEP_TYPES_OPERATIONS_BINARY_OPERATIONS_BINARY_OPERATION_HPP_
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -44,6 +45,9 @@ class ValueAccessor;
  *  @{
  */
 
+typedef std::function<void (void *, const void *, const void*)> BinaryOperatorFunctor;
+typedef std::function<void (void *, const void *)> BinaryOperatorMergeFunctor;
+
 /**
  * @brief A binary operator which can be quickly applied to data items WITHOUT
  *        checking their types.
@@ -55,6 +59,9 @@ class UncheckedBinaryOperator {
    **/
   virtual ~UncheckedBinaryOperator() {
   }
+
+  virtual BinaryOperatorFunctor getFunctor() const = 0;
+  virtual BinaryOperatorMergeFunctor getMergeFunctor() const = 0;
 
   /**
    * @brief Apply to two TypedValues without type-checking.

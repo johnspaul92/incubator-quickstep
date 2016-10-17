@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "types/DatetimeLit.hpp"
@@ -126,8 +127,18 @@ class DateType : public Type {
     return true;
   }
 
+  void makeZeroValue(void *value_ptr) const override {
+    std::memset(value_ptr, 0, sizeof(cpptype));
+  }
+
   inline std::size_t getHash(const void *value_ptr) const {
-    return DateLit::getHash(reinterpret_cast<const DateLit *>(value_ptr));
+    return DateLit::getHash(static_cast<const DateLit *>(value_ptr));
+  }
+
+  inline void copyValue(void *dst, const void *src) const {
+    return DateLit::copyValue(
+        static_cast<DateLit *>(dst),
+        static_cast<const DateLit *>(src));
   }
 
  private:

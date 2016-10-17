@@ -452,6 +452,8 @@ class Type {
 
   virtual bool canCheckEqualityWithMemcmp() const = 0;
 
+  virtual void makeZeroValue(void *value_ptr) const = 0;
+
  protected:
   Type(const SuperTypeID super_type_id,
        const TypeID type_id,
@@ -495,9 +497,10 @@ class AsciiStringSuperType : public Type {
     return false;
   }
 
-  inline std::size_t getHash(const void *value_ptr) const {
-    const char *char_ptr = reinterpret_cast<const char *>(value_ptr);
-    return util::Hash(char_ptr, strnlen(char_ptr, length_));
+  void makeZeroValue(void *value_ptr) const override {
+    if (maximum_byte_length_ > 0) {
+      *static_cast<char *>(value_ptr) = 0;
+    }
   }
 
  protected:

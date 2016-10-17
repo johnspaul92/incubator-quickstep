@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "types/Type.hpp"
@@ -29,6 +30,8 @@
 #include "types/TypeID.hpp"
 #include "types/TypedValue.hpp"
 #include "utility/Macros.hpp"
+
+#include "glog/logging.h"
 
 namespace quickstep {
 
@@ -134,6 +137,15 @@ class VarCharType : public AsciiStringSuperType {
 
   TypedValue coerceValue(const TypedValue &original_value,
                          const Type &original_type) const override;
+
+  inline std::size_t getHash(const void *value_ptr) const {
+    LOG(FATAL) << "Not implemented";
+    return 0;
+  }
+
+  inline void copyValue(void *dst, const void *src) const {
+    LOG(FATAL) << "Not implemented";
+  }
 
  private:
   VarCharType(const std::size_t length, const bool nullable)

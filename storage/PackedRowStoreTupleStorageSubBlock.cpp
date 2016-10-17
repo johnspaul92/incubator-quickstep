@@ -26,6 +26,7 @@
 #include "catalog/CatalogAttribute.hpp"
 #include "catalog/CatalogRelationSchema.hpp"
 #include "catalog/CatalogTypedefs.hpp"
+#include "storage/AggregationResultIterator.hpp"
 #include "storage/PackedRowStoreValueAccessor.hpp"
 #include "storage/StorageBlockInfo.hpp"
 #include "storage/StorageBlockLayout.pb.h"
@@ -200,6 +201,35 @@ tuple_id PackedRowStoreTupleStorageSubBlock::bulkInsertTuples(ValueAccessor *acc
       }
     }
   });
+
+  return header_->num_tuples - original_num_tuples;
+}
+
+tuple_id PackedRowStoreTupleStorageSubBlock::bulkInsertAggregationResults(
+    AggregationResultIterator *results) {
+  const tuple_id original_num_tuples = header_->num_tuples;
+  char *dest_addr = static_cast<char*>(tuple_storage_)
+                        + header_->num_tuples * relation_.getFixedByteLength();
+
+  const std::size_t attrs_total_size = relation_.getMaximumByteLength();
+  const std::size_t key_size = results->getKeySize();
+  const std::size_t results_size = results->getResultsSize();
+  DEBUG_ASSERT(attrs_total_size == key_size + results_size);
+
+  if (results_size  == 0) {
+    while (this->hasSpaceToInsert<false>(1) && results->next()) {
+      results->writeKeyTo(dest_addr);
+      dest_addr += attrs_total_size;
+      ++(header_->num_tuples);
+    }
+  } else {
+    while (this->hasSpaceToInsert<false>(1) && results->next()) {
+      results->writeKeyTo(dest_addr);
+      results->writeResultsTo(dest_addr + key_size);
+      dest_addr += attrs_total_size;
+      ++(header_->num_tuples);
+    }
+  }
 
   return header_->num_tuples - original_num_tuples;
 }

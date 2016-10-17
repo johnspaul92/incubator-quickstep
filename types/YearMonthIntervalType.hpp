@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "types/IntervalLit.hpp"
@@ -117,8 +118,17 @@ class YearMonthIntervalType : public Type {
     return true;
   }
 
+  void makeZeroValue(void *value_ptr) const override {
+    std::memset(value_ptr, 0, sizeof(cpptype));
+  }
+
   inline std::size_t getHash(const void *value_ptr) const {
-    return *reinterpret_cast<const YearMonthIntervalLit::cpptype *>(value_ptr);
+    return *static_cast<const YearMonthIntervalLit::cpptype *>(value_ptr);
+  }
+
+  inline void copyValue(void *dst, const void *src) const {
+    *static_cast<YearMonthIntervalLit::cpptype *>(dst) =
+        *static_cast<const YearMonthIntervalLit::cpptype *>(src);
   }
 
  private:

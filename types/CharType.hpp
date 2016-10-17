@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "types/Type.hpp"
@@ -131,6 +132,17 @@ class CharType : public AsciiStringSuperType {
 
   TypedValue coerceValue(const TypedValue &original_value,
                          const Type &original_type) const override;
+
+  inline std::size_t getHash(const void *value_ptr) const {
+    const char *char_ptr = static_cast<const char *>(value_ptr);
+    return util::Hash(char_ptr, strnlen(char_ptr, length_));
+  }
+
+  inline void copyValue(void *dst, const void *src) const {
+    std::strncpy(static_cast<char *>(dst),
+                 static_cast<const char *>(src),
+                 length_);
+  }
 
  private:
   CharType(const std::size_t length, const bool nullable)

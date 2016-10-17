@@ -52,6 +52,7 @@ namespace tmb { class MessageBus; }
 
 namespace quickstep {
 
+class AggregationResultIterator;
 class StorageManager;
 class ValueAccessor;
 
@@ -144,6 +145,8 @@ class InsertDestination : public InsertDestinationInterface {
   void insertTuple(const Tuple &tuple) override;
 
   void insertTupleInBatch(const Tuple &tuple) override;
+
+  void bulkInsertAggregationResults(AggregationResultIterator *results);
 
   void bulkInsertTuples(ValueAccessor *accessor, bool always_mark_full = false) override;
 

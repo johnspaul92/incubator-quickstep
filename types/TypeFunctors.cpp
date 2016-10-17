@@ -73,8 +73,8 @@ typename Maker::FunctorType MakeHelper(const Type *type) {
   }
 }
 
-struct UntypedKeyHashFunctorMaker {
-  typedef UntypedKeyHashFunctor FunctorType;
+struct UntypedHashFunctorMaker {
+  typedef UntypedHashFunctor FunctorType;
 
   template <typename TypeName>
   static FunctorType MakeFunctor(const TypeName *type) {
@@ -84,22 +84,22 @@ struct UntypedKeyHashFunctorMaker {
   }
 };
 
-UntypedKeyHashFunctor MakeUntypedKeyHashFunctor(const Type *type) {
-  return MakeHelper<UntypedKeyHashFunctorMaker>(type);
+UntypedHashFunctor MakeUntypedHashFunctor(const Type *type) {
+  return MakeHelper<UntypedHashFunctorMaker>(type);
 }
 
-UntypedKeyHashFunctor MakeUntypedKeyHashFunctor(const std::vector<const Type *> &types) {
+UntypedHashFunctor MakeUntypedHashFunctor(const std::vector<const Type *> &types) {
   DCHECK_GE(types.size(), 1u);
 
   if (types.size() == 1u) {
-    return MakeUntypedKeyHashFunctor(types.front());
+    return MakeUntypedHashFunctor(types.front());
   }
 
-  std::vector<UntypedKeyHashFunctor> hashers;
+  std::vector<UntypedHashFunctor> hashers;
   std::vector<std::size_t> offsets;
   std::size_t accum_offset = 0;
   for (const Type *type : types) {
-    hashers.emplace_back(MakeUntypedKeyHashFunctor(type));
+    hashers.emplace_back(MakeUntypedHashFunctor(type));
     offsets.emplace_back(accum_offset);
     accum_offset += type->isVariableLength() ? sizeof(void *)
                                              : type->maximumByteLength();
@@ -115,44 +115,44 @@ UntypedKeyHashFunctor MakeUntypedKeyHashFunctor(const std::vector<const Type *> 
   };
 }
 
-struct UntypedKeyEqualityFunctorMaker {
-  typedef UntypedKeyEqualityFunctor FunctorType;
+struct UntypedEqualityFunctorMaker {
+  typedef UntypedEqualityFunctor FunctorType;
 
   template <typename TypeName>
-  static UntypedKeyEqualityFunctor MakeFunctor(const TypeName *type) {
+  static UntypedEqualityFunctor MakeFunctor(const TypeName *type) {
     return STLLiteralEqual<typename TypeName::cpptype>();
   }
 };
 
 template <>
-UntypedKeyEqualityFunctor UntypedKeyEqualityFunctorMaker::MakeFunctor(
+UntypedEqualityFunctor UntypedEqualityFunctorMaker::MakeFunctor(
     const CharType *type) {
   return STLCharEqual(type->getStringLength());
 }
 
 template <>
-UntypedKeyEqualityFunctor UntypedKeyEqualityFunctorMaker::MakeFunctor(
+UntypedEqualityFunctor UntypedEqualityFunctorMaker::MakeFunctor(
     const VarCharType *type) {
   return STLVarCharEqual();
 }
 
-UntypedKeyEqualityFunctor MakeUntypedKeyEqualityFunctor(const Type *type) {
-  return MakeHelper<UntypedKeyEqualityFunctorMaker>(type);
+UntypedEqualityFunctor MakeUntypedEqualityFunctor(const Type *type) {
+  return MakeHelper<UntypedEqualityFunctorMaker>(type);
 }
 
-UntypedKeyEqualityFunctor MakeUntypedKeyEqualityFunctor(const std::vector<const Type *> &types) {
+UntypedEqualityFunctor MakeUntypedEqualityFunctor(const std::vector<const Type *> &types) {
   DCHECK_GE(types.size(), 1u);
 
   if (types.size() == 1u) {
-    return MakeUntypedKeyEqualityFunctor(types.front());
+    return MakeUntypedEqualityFunctor(types.front());
   }
 
-  std::vector<UntypedKeyEqualityFunctor> equality_checkers;
+  std::vector<UntypedEqualityFunctor> equality_checkers;
   std::vector<std::size_t> offsets;
   std::size_t accum_offset = 0;
   bool can_check_equality_with_memcmp = true;
   for (const Type *type : types) {
-    equality_checkers.emplace_back(MakeUntypedKeyEqualityFunctor(type));
+    equality_checkers.emplace_back(MakeUntypedEqualityFunctor(type));
     offsets.emplace_back(accum_offset);
     accum_offset += type->isVariableLength() ? sizeof(void *)
                                              : type->maximumByteLength();
@@ -160,7 +160,7 @@ UntypedKeyEqualityFunctor MakeUntypedKeyEqualityFunctor(const std::vector<const 
   }
   if (can_check_equality_with_memcmp) {
     return [accum_offset](const void *left, const void *right) -> bool {
-      return memcmp(left, right, accum_offset);
+      return !std::memcmp(left, right, accum_offset);
     };
   } else {
     return [offsets, equality_checkers](const void *left, const void *right) -> bool {
@@ -175,5 +175,19 @@ UntypedKeyEqualityFunctor MakeUntypedKeyEqualityFunctor(const std::vector<const 
   }
 }
 
+struct UntypedCopyFunctorMaker {
+  typedef UntypedCopyFunctor FunctorType;
+
+  template <typename TypeName>
+  static FunctorType MakeFunctor(const TypeName *type) {
+    return [type](void *dst, const void *src) -> void {
+      type->copyValue(dst, src);
+    };
+  }
+};
+
+UntypedCopyFunctor MakeUntypedCopyFunctor(const Type *type) {
+  return MakeHelper<UntypedCopyFunctorMaker>(type);
+}
 
 }  // namespace quickstep

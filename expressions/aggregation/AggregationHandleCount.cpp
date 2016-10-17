@@ -21,12 +21,11 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
 #include "catalog/CatalogTypedefs.hpp"
-#include "storage/HashTable.hpp"
-#include "storage/HashTableFactory.hpp"
 
 #ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
 #include "storage/ValueAccessor.hpp"
@@ -48,22 +47,37 @@ class Type;
 class ValueAccessor;
 
 template <bool count_star, bool nullable_type>
-AggregationStateHashTableBase*
-AggregationHandleCount<count_star, nullable_type>::createGroupByHashTable(
-    const HashTableImplType hash_table_impl,
-    const std::vector<const Type *> &group_by_types,
-    const std::size_t estimated_num_groups,
-    StorageManager *storage_manager) const {
-  return AggregationStateHashTableFactory<
-      AggregationStateCount>::CreateResizable(hash_table_impl,
-                                              group_by_types,
-                                              estimated_num_groups,
-                                              storage_manager);
+AggregationHandleCount<count_star, nullable_type>::AggregationHandleCount() {
+  state_size_ = sizeof(ResultCppType);
+  blank_state_.reset(state_size_, true);
+
+  accumulate_functor_ = [](void *state, const void *value) {
+    *static_cast<ResultCppType *>(state) += 1;
+  };
+
+  merge_functor_ = [](void *state, const void *value) {
+    *static_cast<ResultCppType *>(state) +=
+        *static_cast<const ResultCppType *>(value);
+  };
+
+  finalize_functor_ = [](void *result, const void *state) {
+    *static_cast<ResultCppType *>(result) =
+        *static_cast<const ResultCppType *>(state);
+  };
+
+  result_type_ = &TypeFactory::GetType(ResultType::kStaticTypeID);
 }
 
 template <bool count_star, bool nullable_type>
-AggregationState*
-AggregationHandleCount<count_star, nullable_type>::accumulateColumnVectors(
+void AggregationHandleCount<count_star, nullable_type>::accumulateNullary(
+      void *state,
+      const std::size_t num_tuples) const {
+  *static_cast<ResultCppType *>(state) = num_tuples;
+}
+
+template <bool count_star, bool nullable_type>
+void AggregationHandleCount<count_star, nullable_type>::accumulateColumnVectors(
+    void *state,
     const std::vector<std::unique_ptr<ColumnVector>> &column_vectors) const {
   DCHECK(!count_star)
       << "Called non-nullary accumulation method on an AggregationHandleCount "
@@ -84,20 +98,22 @@ AggregationHandleCount<count_star, nullable_type>::accumulateColumnVectors(
           // the population count of the null bitmap). We should do something
           // similar for ValueAccessor too.
           for (std::size_t pos = 0; pos < column_vector.size(); ++pos) {
-            count += !column_vector.getTypedValue(pos).isNull();
+            if (column_vector.getUntypedValue(pos) != nullptr) {
+              ++count;
+            }
           }
         } else {
           count = column_vector.size();
         }
       });
 
-  return new AggregationStateCount(count);
+  *static_cast<ResultCppType *>(state) = count;
 }
 
 #ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
 template <bool count_star, bool nullable_type>
-AggregationState*
-AggregationHandleCount<count_star, nullable_type>::accumulateValueAccessor(
+void AggregationHandleCount<count_star, nullable_type>::accumulateValueAccessor(
+    void *state,
     ValueAccessor *accessor,
     const std::vector<attribute_id> &accessor_ids) const {
   DCHECK(!count_star)
@@ -114,90 +130,18 @@ AggregationHandleCount<count_star, nullable_type>::accumulateValueAccessor(
       [&accessor_id, &count](auto *accessor) -> void {  // NOLINT(build/c++11)
         if (nullable_type) {
           while (accessor->next()) {
-            count += !accessor->getTypedValue(accessor_id).isNull();
+            if (accessor->getUntypedValue(accessor_id) != nullptr) {
+              ++count;
+            }
           }
         } else {
           count = accessor->getNumTuples();
         }
       });
 
-  return new AggregationStateCount(count);
+  *static_cast<ResultCppType *>(state) = count;
 }
 #endif
-
-template <bool count_star, bool nullable_type>
-void AggregationHandleCount<count_star, nullable_type>::
-    aggregateValueAccessorIntoHashTable(
-        ValueAccessor *accessor,
-        const std::vector<attribute_id> &argument_ids,
-        const std::vector<attribute_id> &group_by_key_ids,
-        AggregationStateHashTableBase *hash_table) const {
-  if (count_star) {
-    DCHECK_EQ(0u, argument_ids.size())
-        << "Got wrong number of arguments for COUNT(*): "
-        << argument_ids.size();
-  } else {
-    DCHECK_EQ(1u, argument_ids.size())
-        << "Got wrong number of arguments for COUNT: " << argument_ids.size();
-  }
-}
-
-template <bool count_star, bool nullable_type>
-void AggregationHandleCount<count_star, nullable_type>::mergeStates(
-    const AggregationState &source, AggregationState *destination) const {
-  const AggregationStateCount &count_source =
-      static_cast<const AggregationStateCount &>(source);
-  AggregationStateCount *count_destination =
-      static_cast<AggregationStateCount *>(destination);
-
-  count_destination->count_.fetch_add(
-      count_source.count_.load(std::memory_order_relaxed),
-      std::memory_order_relaxed);
-}
-
-template <bool count_star, bool nullable_type>
-void AggregationHandleCount<count_star, nullable_type>::mergeStatesFast(
-    const std::uint8_t *source, std::uint8_t *destination) const {
-  const std::int64_t *src_count_ptr =
-      reinterpret_cast<const std::int64_t *>(source);
-  std::int64_t *dst_count_ptr = reinterpret_cast<std::int64_t *>(destination);
-  (*dst_count_ptr) += (*src_count_ptr);
-}
-
-template <bool count_star, bool nullable_type>
-ColumnVector*
-AggregationHandleCount<count_star, nullable_type>::finalizeHashTable(
-    const AggregationStateHashTableBase &hash_table,
-    std::vector<std::vector<TypedValue>> *group_by_keys,
-    int index) const {
-  return finalizeHashTableHelperFast<
-      AggregationHandleCount<count_star, nullable_type>,
-      AggregationStateFastHashTable>(
-      TypeFactory::GetType(kLong), hash_table, group_by_keys, index);
-}
-
-template <bool count_star, bool nullable_type>
-AggregationState* AggregationHandleCount<count_star, nullable_type>::
-    aggregateOnDistinctifyHashTableForSingle(
-        const AggregationStateHashTableBase &distinctify_hash_table) const {
-  DCHECK_EQ(count_star, false);
-  return aggregateOnDistinctifyHashTableForSingleUnaryHelperFast<
-      AggregationHandleCount<count_star, nullable_type>,
-      AggregationStateCount>(distinctify_hash_table);
-}
-
-template <bool count_star, bool nullable_type>
-void AggregationHandleCount<count_star, nullable_type>::
-    aggregateOnDistinctifyHashTableForGroupBy(
-        const AggregationStateHashTableBase &distinctify_hash_table,
-        AggregationStateHashTableBase *aggregation_hash_table,
-        std::size_t index) const {
-  DCHECK_EQ(count_star, false);
-  aggregateOnDistinctifyHashTableForGroupByUnaryHelperFast<
-      AggregationHandleCount<count_star, nullable_type>,
-      AggregationStateFastHashTable>(
-      distinctify_hash_table, aggregation_hash_table, index);
-}
 
 // Explicitly instantiate and compile in the different versions of
 // AggregationHandleCount we need. Note that we do not compile a version with

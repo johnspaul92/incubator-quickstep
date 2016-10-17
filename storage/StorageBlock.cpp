@@ -31,6 +31,7 @@
 #include "expressions/aggregation/AggregationHandle.hpp"
 #include "expressions/predicate/Predicate.hpp"
 #include "expressions/scalar/Scalar.hpp"
+#include "storage/AggregationResultIterator.hpp"
 #include "storage/BasicColumnStoreTupleStorageSubBlock.hpp"
 #include "storage/BloomFilterIndexSubBlock.hpp"
 #include "storage/CSBTreeIndexSubBlock.hpp"
@@ -60,6 +61,7 @@
 #include "types/containers/Tuple.hpp"
 #include "types/operations/comparisons/ComparisonUtil.hpp"
 #include "utility/Macros.hpp"
+#include "utility/ScopedBuffer.hpp"
 
 #include "glog/logging.h"
 
@@ -267,6 +269,19 @@ tuple_id StorageBlock::bulkInsertTuples(ValueAccessor *accessor) {
   return num_inserted;
 }
 
+tuple_id StorageBlock::bulkInsertAggregationResults(AggregationResultIterator *results) {
+  const tuple_id num_inserted = tuple_store_->bulkInsertAggregationResults(results);
+  if (num_inserted != 0) {
+    invalidateAllIndexes();
+    dirty_ = true;
+  } else if (tuple_store_->isEmpty()) {
+    if (!results->iterationFinished()) {
+      throw TupleTooLargeForBlock(0);
+    }
+  }
+  return num_inserted;
+}
+
 tuple_id StorageBlock::bulkInsertTuplesWithRemappedAttributes(
     const std::vector<attribute_id> &attribute_map,
     ValueAccessor *accessor) {
@@ -385,7 +400,7 @@ void StorageBlock::selectSimple(const std::vector<attribute_id> &selection,
                                                       accessor.get());
 }
 
-AggregationState* StorageBlock::aggregate(
+ScopedBuffer StorageBlock::aggregate(
     const AggregationHandle &handle,
     const std::vector<std::unique_ptr<const Scalar>> &arguments,
     const std::vector<attribute_id> *arguments_as_attributes,
@@ -419,7 +434,6 @@ void StorageBlock::aggregateGroupBy(
     const std::vector<std::unique_ptr<const Scalar>> &group_by,
     const Predicate *predicate,
     AggregationStateHashTableBase *hash_table,
-    AggregationHashTableBase *tp_hash_table,
     std::unique_ptr<TupleIdSequence> *reuse_matches,
     std::vector<std::unique_ptr<ColumnVector>> *reuse_group_by_vectors) const {
   DCHECK_GT(group_by.size(), 0u)
@@ -492,115 +506,9 @@ void StorageBlock::aggregateGroupBy(
      }
   }
 
-  hash_table->upsertValueAccessorCompositeKeyFast(argument_ids,
-                                                  &temp_result,
-                                                  key_ids,
-                                                  true);
-
-  // NOTE: experiments here
-  if (tp_hash_table != nullptr) {
-    if (key_ids.size() == 1) {
-      tp_hash_table->upsertValueAccessor(&temp_result,
-                                         key_ids.front(),
-                                         argument_ids,
-                                         true);
-    } else {
-      tp_hash_table->upsertValueAccessorCompositeKey(&temp_result,
-                                                     key_ids,
-                                                     argument_ids,
-                                                     true);
-    }
-    tp_hash_table->print();
-  }
-}
-
-
-void StorageBlock::aggregateDistinct(
-    const AggregationHandle &handle,
-    const std::vector<std::unique_ptr<const Scalar>> &arguments,
-    const std::vector<attribute_id> *arguments_as_attributes,
-    const std::vector<std::unique_ptr<const Scalar>> &group_by,
-    const Predicate *predicate,
-    AggregationStateHashTableBase *distinctify_hash_table,
-    std::unique_ptr<TupleIdSequence> *reuse_matches,
-    std::vector<std::unique_ptr<ColumnVector>> *reuse_group_by_vectors) const {
-  DCHECK_GT(arguments.size(), 0u)
-      << "Called aggregateDistinct() with zero argument expressions";
-  DCHECK((group_by.size() == 0 || reuse_group_by_vectors != nullptr));
-
-  std::vector<attribute_id> key_ids;
-
-  // An intermediate ValueAccessor that stores the materialized 'arguments' for
-  // this aggregate, as well as the GROUP BY expression values.
-  ColumnVectorsValueAccessor temp_result;
-  {
-    std::unique_ptr<ValueAccessor> accessor;
-    if (predicate) {
-      if (!*reuse_matches) {
-        // If there is a filter predicate that hasn't already been evaluated,
-        // evaluate it now and save the results for other aggregates on this
-        // same block.
-        reuse_matches->reset(getMatchesForPredicate(predicate));
-      }
-
-      // Create a filtered ValueAccessor that only iterates over predicate
-      // matches.
-      accessor.reset(tuple_store_->createValueAccessor(reuse_matches->get()));
-    } else {
-      // Create a ValueAccessor that iterates over all tuples in this block
-      accessor.reset(tuple_store_->createValueAccessor());
-    }
-
-#ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
-    // If all the arguments to this aggregate are plain relation attributes,
-    // aggregate directly on a ValueAccessor from this block to avoid a copy.
-    if ((arguments_as_attributes != nullptr) && (!arguments_as_attributes->empty())) {
-      DCHECK_EQ(arguments.size(), arguments_as_attributes->size())
-          << "Mismatch between number of arguments and number of attribute_ids";
-      DCHECK_EQ(group_by.size(), 0u);
-      handle.insertValueAccessorIntoDistinctifyHashTable(
-          accessor.get(), *arguments_as_attributes, distinctify_hash_table);
-      return;
-    }
-#endif
-
-    SubBlocksReference sub_blocks_ref(*tuple_store_,
-                                      indices_,
-                                      indices_consistent_);
-    attribute_id attr_id = 0;
-
-    if (!group_by.empty()) {
-      // Put GROUP BY keys into 'temp_result'.
-      if (reuse_group_by_vectors->empty()) {
-        // Compute GROUP BY values from group_by Scalars, and store them in
-        // reuse_group_by_vectors for reuse by other aggregates on this same
-        // block.
-        reuse_group_by_vectors->reserve(group_by.size());
-        for (const std::unique_ptr<const Scalar> &group_by_element : group_by) {
-          reuse_group_by_vectors->emplace_back(
-              group_by_element->getAllValues(accessor.get(), &sub_blocks_ref));
-          temp_result.addColumn(reuse_group_by_vectors->back().get(), false);
-          key_ids.push_back(attr_id++);
-        }
-      } else {
-        // Reuse precomputed GROUP BY values from reuse_group_by_vectors.
-        DCHECK_EQ(group_by.size(), reuse_group_by_vectors->size())
-            << "Wrong number of reuse_group_by_vectors";
-        for (const std::unique_ptr<ColumnVector> &reuse_cv : *reuse_group_by_vectors) {
-          temp_result.addColumn(reuse_cv.get(), false);
-          key_ids.push_back(attr_id++);
-        }
-      }
-    }
-    // Compute argument vectors and add them to 'temp_result'.
-    for (const std::unique_ptr<const Scalar> &argument : arguments) {
-      temp_result.addColumn(argument->getAllValues(accessor.get(), &sub_blocks_ref));
-      key_ids.push_back(attr_id++);
-    }
-  }
-
-  handle.insertValueAccessorIntoDistinctifyHashTable(
-      &temp_result, key_ids, distinctify_hash_table);
+  hash_table->upsertValueAccessorCompositeKey(&temp_result,
+                                              key_ids,
+                                              argument_ids);
 }
 
 // TODO(chasseur): Vectorization for updates.
@@ -1302,14 +1210,17 @@ std::unordered_map<attribute_id, TypedValue>* StorageBlock::generateUpdatedValue
   return update_map;
 }
 
-AggregationState* StorageBlock::aggregateHelperColumnVector(
+ScopedBuffer StorageBlock::aggregateHelperColumnVector(
     const AggregationHandle &handle,
     const std::vector<std::unique_ptr<const Scalar>> &arguments,
     const TupleIdSequence *matches) const {
+  ScopedBuffer state = handle.createInitialState();
   if (arguments.empty()) {
     // Special case. This is a nullary aggregate (i.e. COUNT(*)).
-    return handle.accumulateNullary(matches == nullptr ? tuple_store_->numTuples()
-                                                       : matches->size());
+    handle.accumulateNullary(
+        state.get(),
+        matches == nullptr ? tuple_store_->numTuples()
+                           : matches->size());
   } else {
     // Set up a ValueAccessor that will be used when materializing argument
     // values below (possibly filtered based on the '*matches' to a filter
@@ -1332,12 +1243,13 @@ AggregationState* StorageBlock::aggregateHelperColumnVector(
     }
 
     // Have the AggregationHandle actually do the aggregation.
-    return handle.accumulateColumnVectors(column_vectors);
+    handle.accumulateColumnVectors(state.get(), column_vectors);
   }
+  return state;
 }
 
 #ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
-AggregationState* StorageBlock::aggregateHelperValueAccessor(
+ScopedBuffer StorageBlock::aggregateHelperValueAccessor(
     const AggregationHandle &handle,
     const std::vector<attribute_id> &argument_ids,
     const TupleIdSequence *matches) const {
@@ -1351,9 +1263,11 @@ AggregationState* StorageBlock::aggregateHelperValueAccessor(
   }
 
   // Have the AggregationHandle actually do the aggregation.
-  return handle.accumulateValueAccessor(
-      accessor.get(),
-      argument_ids);
+  ScopedBuffer state = handle.createInitialState();
+  handle.accumulateValueAccessor(state.get(),
+                                 accessor.get(),
+                                 argument_ids);
+  return state;
 }
 #endif  // QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
 

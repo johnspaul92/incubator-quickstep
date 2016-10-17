@@ -28,6 +28,8 @@
 
 namespace quickstep {
 
+class AggregationResultIterator;
+
 /** \addtogroup Storage
  *  @{
  */
@@ -74,31 +76,6 @@ class HashTableBase {
  public:
   virtual ~HashTableBase() {}
 
-  /**
-   * TODO(harshad) We should get rid of this function from here. We are
-   * postponing it because of the amount of work to be done is significant.
-   * The steps are as follows:
-   * 1. Replace AggregationStateHashTableBase occurence in HashTablePool to
-   * the FastHashTable implementation (i.e. an implementation specialized for
-   * aggregation).
-   * 2. Remove createGroupByHashTable from the AggregationHandle* classes.
-   * 3. Replace AggregationStateHashTableBase occurences in AggregationHandle*
-   * clases to the FastHashTable implementation (i.e. an implementation
-   * specialized for aggregation).
-   * 4. Move this method to the FastHashTable class from here, so that it can
-   * be called from the AggregationHandle* classes.
-   *
-   * Optionally, we can also remove the AggregationStateHashTableBase
-   * specialization from this file.
-   **/
-  virtual bool upsertValueAccessorCompositeKeyFast(
-      const std::vector<attribute_id> &argument,
-      ValueAccessor *accessor,
-      const std::vector<attribute_id> &key_attr_ids,
-      const bool check_for_null_keys) {
-    return false;
-  }
-
  protected:
   HashTableBase() {}
 
@@ -106,24 +83,24 @@ class HashTableBase {
   DISALLOW_COPY_AND_ASSIGN(HashTableBase);
 };
 
-typedef HashTableBase<true, false, true, false> AggregationStateHashTableBase;
-
-class AggregationHashTableBase {
+class AggregationStateHashTableBase {
  public:
+  virtual ~AggregationStateHashTableBase() {}
+
   virtual bool upsertValueAccessor(ValueAccessor *accessor,
                                    const attribute_id key_attr_id,
-                                   const std::vector<attribute_id> &argument_ids,
-                                   const bool check_for_null_keys) = 0;
+                                   const std::vector<attribute_id> &argument_ids) = 0;
 
   virtual bool upsertValueAccessorCompositeKey(ValueAccessor *accessor,
                                                const std::vector<attribute_id> &key_attr_ids,
-                                               const std::vector<attribute_id> &argument_ids,
-                                               const bool check_for_null_keys) = 0;
+                                               const std::vector<attribute_id> &argument_ids) = 0;
+
+  virtual AggregationResultIterator* createResultIterator() const = 0;
 
   virtual void print() const = 0;
 
  protected:
-  AggregationHashTableBase() {}
+  AggregationStateHashTableBase() {}
 };
 
 

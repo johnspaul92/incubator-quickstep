@@ -17,8 +17,8 @@
  * under the License.
  **/
 
-#ifndef QUICKSTEP_STORAGE_AGGREGATION_HASH_TABLE_HPP_
-#define QUICKSTEP_STORAGE_AGGREGATION_HASH_TABLE_HPP_
+#ifndef QUICKSTEP_STORAGE_AGGREGATION_STATE_HASH_TABLE_HPP_
+#define QUICKSTEP_STORAGE_AGGREGATION_STATE_HASH_TABLE_HPP_
 
 #include <algorithm>
 #include <atomic>
@@ -32,6 +32,8 @@
 #include <vector>
 
 #include "expressions/aggregation/AggregationHandle.hpp"
+#include "storage/AggregationResultIterator.hpp"
+#include "storage/AggregationStateManager.hpp"
 #include "storage/HashTableBase.hpp"
 #include "storage/HashTableUntypedKeyManager.hpp"
 #include "storage/StorageBlob.hpp"
@@ -48,6 +50,7 @@
 #include "utility/InlineMemcpy.hpp"
 #include "utility/Macros.hpp"
 #include "utility/PrimeNumber.hpp"
+#include "utility/ScopedBuffer.hpp"
 
 namespace quickstep {
 
@@ -55,72 +58,20 @@ namespace quickstep {
  *  @{
  */
 
-template <bool use_mutex>
-class AggregationHashTablePayloadManager {
+class ThreadPrivateAggregationStateHashTable : public AggregationStateHashTableBase {
  public:
-  AggregationHashTablePayloadManager(const std::vector<AggregationHandle *> &handles)
-      : handles_(handles),
-        payload_size_in_bytes_(0) {
-    if (use_mutex) {
-      payload_size_in_bytes_ += sizeof(SpinMutex);
-    }
-    for (const AggregationHandle *handle : handles) {
-      const std::size_t state_size = handle->getStateSize();
-      agg_state_sizes_.emplace_back(state_size);
-      agg_state_offsets_.emplace_back(payload_size_in_bytes_);
-      payload_size_in_bytes_ += state_size;
-    }
-
-    initial_payload_ = std::malloc(payload_size_in_bytes_);
-    if (use_mutex) {
-      new(initial_payload_) Mutex;
-    }
-//    for (std::size_t i = 0; i < handles_.size(); ++i) {
-//      handles_[i]->initPayload(
-//          static_cast<std::uint8_t *>(initial_payload_) + agg_state_offsets_[i]);
-//    }
-  }
-
-  ~AggregationHashTablePayloadManager() {
-    std::free(initial_payload_);
-  }
-
-  inline std::size_t getPayloadSizeInBytes() const {
-    return payload_size_in_bytes_;
-  }
-
-  inline void updatePayload(void *payload) const {
-  }
-
-  inline void initPayload(void *payload) const {
-  }
-
- private:
-  std::vector<AggregationHandle *> handles_;
-
-  std::vector<std::size_t> agg_state_sizes_;
-  std::vector<std::size_t> agg_state_offsets_;
-  std::size_t payload_size_in_bytes_;
-
-  void *initial_payload_;
-
-  DISALLOW_COPY_AND_ASSIGN(AggregationHashTablePayloadManager);
-};
-
-class ThreadPrivateAggregationHashTable : public AggregationHashTableBase {
- public:
-  ThreadPrivateAggregationHashTable(const std::vector<const Type *> &key_types,
-                                    const std::size_t num_entries,
-                                    const std::vector<AggregationHandle *> &handles,
-                                    StorageManager *storage_manager)
+  ThreadPrivateAggregationStateHashTable(const std::vector<const Type *> &key_types,
+                                         const std::size_t num_entries,
+                                         const std::vector<AggregationHandle *> &handles,
+                                         StorageManager *storage_manager)
     : payload_manager_(handles),
       key_types_(key_types),
-      key_manager_(this->key_types_, payload_manager_.getPayloadSizeInBytes()),
+      key_manager_(this->key_types_, payload_manager_.getStatesSizeInBytes()),
       slots_(num_entries * kHashTableLoadFactor,
              key_manager_.getUntypedKeyHashFunctor(),
              key_manager_.getUntypedKeyEqualityFunctor()),
       bucket_size_(ComputeBucketSize(key_manager_.getFixedKeySize(),
-                                     payload_manager_.getPayloadSizeInBytes())),
+                                     payload_manager_.getStatesSizeInBytes())),
       buckets_allocated_(0),
       storage_manager_(storage_manager) {
     std::size_t num_storage_slots =
@@ -134,34 +85,36 @@ class ThreadPrivateAggregationHashTable : public AggregationHashTableBase {
     num_buckets_ = num_storage_slots * kSlotSizeBytes / bucket_size_;
   }
 
-  void resize() {
-    const std::size_t resized_memory_required = num_buckets_ * bucket_size_ * 2;
-    const std::size_t resized_storage_slots =
-        this->storage_manager_->SlotsNeededForBytes(resized_memory_required);
-    const block_id resized_blob_id =
-        this->storage_manager_->createBlob(resized_storage_slots);
-    MutableBlobReference resized_blob =
-        this->storage_manager_->getBlobMutable(resized_blob_id);
+  ~ThreadPrivateAggregationStateHashTable() {}
 
-    void *resized_buckets = resized_blob->getMemoryMutable();
-    std::memcpy(resized_buckets, buckets_, buckets_allocated_ * bucket_size_);
+  inline std::size_t numEntries() const {
+    return buckets_allocated_;
+  }
 
-    for (auto &pair : slots_) {
-      pair.second =
-           (static_cast<const char *>(pair.first) - static_cast<char *>(buckets_))
-           + static_cast<char *>(resized_buckets);
-    }
+  inline std::size_t getKeySizeInBytes() const {
+    return key_manager_.getFixedKeySize();
+  }
 
-    buckets_ = resized_buckets;
-    num_buckets_ = resized_storage_slots * kSlotSizeBytes / bucket_size_;
-    std::swap(this->blob_, resized_blob);
+  inline std::size_t getStatesSizeInBytes() const {
+    return payload_manager_.getStatesSizeInBytes();
+  }
+
+  inline std::size_t getResultsSizeInBytes() const {
+    return payload_manager_.getResultsSizeInBytes();
+  }
+
+  AggregationResultIterator* createResultIterator() const override {
+    return new AggregationResultIterator(buckets_,
+                                         bucket_size_,
+                                         buckets_allocated_,
+                                         key_manager_,
+                                         payload_manager_);
   }
 
   bool upsertValueAccessor(ValueAccessor *accessor,
                            const attribute_id key_attr_id,
-                           const std::vector<attribute_id> &argument_ids,
-                           const bool check_for_null_keys) override {
-    if (check_for_null_keys) {
+                           const std::vector<attribute_id> &argument_ids) override {
+    if (key_manager_.isKeyNullable()) {
       return upsertValueAccessorInternal<true>(
           accessor, key_attr_id, argument_ids);
     } else {
@@ -186,9 +139,10 @@ class ThreadPrivateAggregationHashTable : public AggregationHashTableBase {
         bool is_empty;
         void *bucket = locateBucket(key, &is_empty);
         if (is_empty) {
-          payload_manager_.initPayload(bucket);
+          payload_manager_.initializeStates(bucket);
         } else {
-          payload_manager_.updatePayload(bucket);
+          payload_manager_.template updateStates<check_for_null_keys>(
+              bucket, accessor, argument_ids);
         }
       }
       return true;
@@ -197,9 +151,8 @@ class ThreadPrivateAggregationHashTable : public AggregationHashTableBase {
 
   bool upsertValueAccessorCompositeKey(ValueAccessor *accessor,
                                        const std::vector<attribute_id> &key_attr_ids,
-                                       const std::vector<attribute_id> &argument_ids,
-                                       const bool check_for_null_keys) override {
-    if (check_for_null_keys) {
+                                       const std::vector<attribute_id> &argument_ids) override {
+    if (key_manager_.isKeyNullable()) {
       return upsertValueAccessorCompositeKeyInternal<true>(
           accessor, key_attr_ids, argument_ids);
     } else {
@@ -234,17 +187,50 @@ class ThreadPrivateAggregationHashTable : public AggregationHashTableBase {
               prealloc_bucket);
         }
         void *bucket = locateBucketWithPrealloc(prealloc_bucket);
-        if (bucket != prealloc_bucket) {
-          payload_manager_.initPayload(bucket);
+        if (bucket == prealloc_bucket) {
+          payload_manager_.initializeStates(bucket);
           prealloc_bucket = allocateBucket();
         } else {
-          payload_manager_.updatePayload(bucket);
+          payload_manager_.template updateStates<check_for_null_keys>(
+              bucket, accessor, argument_ids);
         }
       }
       // Reclaim the last unused bucket
       --buckets_allocated_;
       return true;
     });
+  }
+
+  void mergeHashTable(const ThreadPrivateAggregationStateHashTable *source_hash_table) {
+    source_hash_table->forEachKeyAndStates(
+        [&](const void *source_key, const void *source_states) -> void {
+          bool is_empty;
+          void *bucket = locateBucket(source_key, &is_empty);
+          if (is_empty) {
+            payload_manager_.copyStates(bucket, source_states);
+          } else {
+            payload_manager_.mergeStates(bucket, source_states);
+          }
+        });
+  }
+
+  template <typename FunctorT>
+  inline void forEachKey(const FunctorT &functor) const {
+    for (std::size_t i = 0; i < buckets_allocated_; ++i) {
+      functor(key_manager_.getUntypedKeyComponent(locateBucket(i)));
+    }
+  }
+
+  template <typename FunctorT>
+  inline void forEachKeyAndStates(const FunctorT &functor) const {
+    for (std::size_t i = 0; i < buckets_allocated_; ++i) {
+      const char *bucket = static_cast<const char *>(locateBucket(i));
+      functor(key_manager_.getUntypedKeyComponent(bucket), bucket);
+    }
+  }
+
+  inline void* locateBucket(const std::size_t bucket_id) const {
+    return static_cast<char *>(buckets_) + bucket_id * bucket_size_;
   }
 
   inline void* locateBucket(const void *key, bool *is_empty) {
@@ -276,9 +262,32 @@ class ThreadPrivateAggregationHashTable : public AggregationHashTableBase {
     if (buckets_allocated_ >= num_buckets_) {
       resize();
     }
-    void *bucket = static_cast<char *>(buckets_) + buckets_allocated_ * bucket_size_;
+    void *bucket = locateBucket(buckets_allocated_);
     ++buckets_allocated_;
     return bucket;
+  }
+
+  void resize() {
+    const std::size_t resized_memory_required = num_buckets_ * bucket_size_ * 2;
+    const std::size_t resized_storage_slots =
+        this->storage_manager_->SlotsNeededForBytes(resized_memory_required);
+    const block_id resized_blob_id =
+        this->storage_manager_->createBlob(resized_storage_slots);
+    MutableBlobReference resized_blob =
+        this->storage_manager_->getBlobMutable(resized_blob_id);
+
+    void *resized_buckets = resized_blob->getMemoryMutable();
+    std::memcpy(resized_buckets, buckets_, buckets_allocated_ * bucket_size_);
+
+    for (auto &pair : slots_) {
+      pair.second =
+           (static_cast<const char *>(pair.first) - static_cast<char *>(buckets_))
+           + static_cast<char *>(resized_buckets);
+    }
+
+    buckets_ = resized_buckets;
+    num_buckets_ = resized_storage_slots * kSlotSizeBytes / bucket_size_;
+    std::swap(this->blob_, resized_blob);
   }
 
   void print() const override {
@@ -292,7 +301,7 @@ class ThreadPrivateAggregationHashTable : public AggregationHashTableBase {
 
  private:
   // Helper object to manage hash table payloads (i.e. aggregation states).
-  AggregationHashTablePayloadManager<false> payload_manager_;
+  AggregationStateManager<false> payload_manager_;
 
   // Type(s) of keys.
   const std::vector<const Type*> key_types_;
@@ -309,8 +318,8 @@ class ThreadPrivateAggregationHashTable : public AggregationHashTableBase {
   }
 
   std::unordered_map<const void *, void *,
-                     UntypedKeyHashFunctor,
-                     UntypedKeyEqualityFunctor> slots_;
+                     UntypedHashFunctor,
+                     UntypedEqualityFunctor> slots_;
 
   void *buckets_;
   const std::size_t bucket_size_;
@@ -320,11 +329,10 @@ class ThreadPrivateAggregationHashTable : public AggregationHashTableBase {
   StorageManager *storage_manager_;
   MutableBlobReference blob_;
 
-  DISALLOW_COPY_AND_ASSIGN(ThreadPrivateAggregationHashTable);
+  DISALLOW_COPY_AND_ASSIGN(ThreadPrivateAggregationStateHashTable);
 };
-
 
 }  // namespace quickstep
 
-#endif  // QUICKSTEP_STORAGE_AGGREGATION_HASH_TABLE_HPP_
+#endif  // QUICKSTEP_STORAGE_AGGREGATION_STATE_HASH_TABLE_HPP_
 

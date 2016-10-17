@@ -105,6 +105,10 @@ struct DateLit {
         | static_cast<std::uint64_t>(date_lit->month) << 8
         | static_cast<std::uint64_t>(date_lit->day);
   }
+
+  static inline void copyValue(DateLit *dst, const DateLit *src) {
+    *dst = *src;
+  }
 };
 
 /**

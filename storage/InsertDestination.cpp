@@ -33,6 +33,7 @@
 #include "query_execution/QueryExecutionMessages.pb.h"
 #include "query_execution/QueryExecutionTypedefs.hpp"
 #include "query_execution/QueryExecutionUtil.hpp"
+#include "storage/AggregationResultIterator.hpp"
 #include "storage/InsertDestination.pb.h"
 #include "storage/StorageBlock.hpp"
 #include "storage/StorageBlockInfo.hpp"
@@ -219,6 +220,23 @@ void InsertDestination::bulkInsertTuples(ValueAccessor *accessor, bool always_ma
       }
     }
   });
+}
+
+void InsertDestination::bulkInsertAggregationResults(
+    AggregationResultIterator *results) {
+  results->beginIteration();
+  while (!results->iterationFinished()) {
+    MutableBlockReference output_block = this->getBlockForInsertion();
+    // FIXME(chasseur): Deal with TupleTooLargeForBlock exception.
+    if (output_block->bulkInsertAggregationResults(results) == 0) {
+      // output_block is full.
+      this->returnBlock(std::move(output_block), true);
+    } else {
+      // Bulk insert into output_block was successful. output_block
+      // will be rebuilt when there won't be any more insertions to it.
+      this->returnBlock(std::move(output_block), !results->iterationFinished());
+    }
+  }
 }
 
 void InsertDestination::bulkInsertTuplesWithRemappedAttributes(

@@ -32,13 +32,16 @@ class Type;
  *  @{
  */
 
-typedef std::function<std::size_t (const void *)> UntypedKeyHashFunctor;
-UntypedKeyHashFunctor MakeUntypedKeyHashFunctor(const Type *type);
-UntypedKeyHashFunctor MakeUntypedKeyHashFunctor(const std::vector<const Type *> &types);
+typedef std::function<std::size_t (const void *)> UntypedHashFunctor;
+UntypedHashFunctor MakeUntypedHashFunctor(const Type *type);
+UntypedHashFunctor MakeUntypedHashFunctor(const std::vector<const Type *> &types);
 
-typedef std::function<bool (const void *, const void *)> UntypedKeyEqualityFunctor;
-UntypedKeyEqualityFunctor MakeUntypedKeyEqualityFunctor(const Type *type);
-UntypedKeyEqualityFunctor MakeUntypedKeyEqualityFunctor(const std::vector<const Type *> &types);
+typedef std::function<bool (const void *, const void *)> UntypedEqualityFunctor;
+UntypedEqualityFunctor MakeUntypedEqualityFunctor(const Type *type);
+UntypedEqualityFunctor MakeUntypedEqualityFunctor(const std::vector<const Type *> &types);
+
+typedef std::function<void (void *, const void *)> UntypedCopyFunctor;
+UntypedCopyFunctor MakeUntypedCopyFunctor(const Type *type);
 
 /** @} */
 

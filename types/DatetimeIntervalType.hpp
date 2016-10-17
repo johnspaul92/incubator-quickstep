@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "types/IntervalLit.hpp"
@@ -118,8 +119,17 @@ class DatetimeIntervalType : public Type {
     return true;
   }
 
+  void makeZeroValue(void *value_ptr) const override {
+    std::memset(value_ptr, 0, sizeof(cpptype));
+  }
+
   inline std::size_t getHash(const void *value_ptr) const {
-    return *reinterpret_cast<const DatetimeIntervalLit::cpptype *>(value_ptr);
+    return *static_cast<const DatetimeIntervalLit::cpptype *>(value_ptr);
+  }
+
+  inline void copyValue(void *dst, const void *src) const {
+    *static_cast<DatetimeIntervalLit::cpptype *>(dst) =
+        *static_cast<const DatetimeIntervalLit::cpptype *>(src);
   }
 
  private:

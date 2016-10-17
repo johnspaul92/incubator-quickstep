@@ -30,10 +30,13 @@
 #include "types/TypedValue.hpp"
 #include "utility/Macros.hpp"
 
+#include "glog/logging.h"
+
 namespace quickstep {
 
 class CatalogRelationSchema;
 class ComparisonPredicate;
+class AggregationResultIterator;
 class Tuple;
 class TupleStorageSubBlockDescription;
 class ValueAccessor;
@@ -244,6 +247,10 @@ class TupleStorageSubBlock {
    * @return The number of tuples inserted from accessor.
    **/
   virtual tuple_id bulkInsertTuples(ValueAccessor *accessor) = 0;
+
+  virtual tuple_id bulkInsertAggregationResults(AggregationResultIterator *results) {
+    LOG(FATAL) << "Not implemented\n";
+  }
 
   /**
    * @brief Insert as many tuples as possible from a ValueAccessor (all of the

@@ -172,6 +172,26 @@ class ArithmeticUncheckedBinaryOperator : public UncheckedBinaryOperator {
   ArithmeticUncheckedBinaryOperator(const ArithmeticUncheckedBinaryOperator &orig) = default;
   ~ArithmeticUncheckedBinaryOperator() = default;
 
+  BinaryOperatorFunctor getFunctor() const override {
+    OpFunctor<LeftCppType, RightCppType> op_functor;
+    return [op_functor](void *result, const void *left, const void *right) {
+      *static_cast<typename ResultType::cpptype *>(result) =
+          op_functor(
+              *static_cast<const LeftCppType *>(left),
+              *static_cast<const RightCppType *>(right));
+    };
+  }
+
+  BinaryOperatorMergeFunctor getMergeFunctor() const override {
+    OpFunctor<LeftCppType, RightCppType> op_functor;
+    return [op_functor](void *left, const void *right) {
+      *static_cast<typename ResultType::cpptype *>(left) =
+          op_functor(
+              *static_cast<const LeftCppType *>(left),
+              *static_cast<const RightCppType *>(right));
+    };
+  }
+
   inline TypedValue applyToTypedValues(const TypedValue &left,
                                        const TypedValue &right) const override {
     return applyToTypedValuesInl(left, right);

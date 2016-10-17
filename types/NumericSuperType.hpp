@@ -21,6 +21,7 @@
 #define QUICKSTEP_TYPES_NUMERIC_SUPER_TYPE_HPP_
 
 #include <cstddef>
+#include <cstring>
 
 #include "types/NullCoercibilityCheckMacro.hpp"
 #include "types/Type.hpp"
@@ -60,8 +61,16 @@ class NumericSuperType : public Type {
     return true;
   }
 
+  void makeZeroValue(void *value_ptr) const override {
+    std::memset(value_ptr, 0, sizeof(cpptype));
+  }
+
   inline std::size_t getHash(const void *value_ptr) const {
-    return *reinterpret_cast<const CppType *>(value_ptr);
+    return *static_cast<const CppType *>(value_ptr);
+  }
+
+  inline void copyValue(void *dst, const void *src) const {
+    *static_cast<CppType *>(dst) = *static_cast<const CppType *>(src);
   }
 
  protected:

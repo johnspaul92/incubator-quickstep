@@ -20,6 +20,7 @@
 #include "expressions/aggregation/AggregationHandleSum.hpp"
 
 #include <cstddef>
+#include <cstring>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -35,6 +36,7 @@
 #include "types/operations/binary_operations/BinaryOperation.hpp"
 #include "types/operations/binary_operations/BinaryOperationFactory.hpp"
 #include "types/operations/binary_operations/BinaryOperationID.hpp"
+#include "types/TypeFunctors.hpp"
 
 #include "glog/logging.h"
 
@@ -42,12 +44,11 @@ namespace quickstep {
 
 class StorageManager;
 
-AggregationHandleSum::AggregationHandleSum(const Type &type)
-    : argument_type_(type), block_update_(false) {
+AggregationHandleSum::AggregationHandleSum(const Type &argument_type) {
   // We sum Int as Long and Float as Double so that we have more headroom when
   // adding many values.
   TypeID type_precision_id;
-  switch (argument_type_.getTypeID()) {
+  switch (argument_type.getTypeID()) {
     case kInt:
     case kLong:
       type_precision_id = kLong;
@@ -57,134 +58,57 @@ AggregationHandleSum::AggregationHandleSum(const Type &type)
       type_precision_id = kDouble;
       break;
     default:
-      type_precision_id = type.getTypeID();
+      type_precision_id = argument_type.getTypeID();
       break;
   }
 
   const Type &sum_type = TypeFactory::GetType(type_precision_id);
-  blank_state_.sum_ = sum_type.makeZeroValue();
+  state_size_ = sum_type.maximumByteLength();
+  blank_state_.reset(state_size_, false);
+
+  tv_blank_state_ = sum_type.makeZeroValue();
 
   // Make operators to do arithmetic:
   // Add operator for summing argument values.
-  fast_operator_.reset(
+  accumulate_operator_.reset(
       BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kAdd)
-          .makeUncheckedBinaryOperatorForTypes(sum_type, argument_type_));
+          .makeUncheckedBinaryOperatorForTypes(sum_type, argument_type));
+  accumulate_functor_ = accumulate_operator_->getMergeFunctor();
+
   // Add operator for merging states.
   merge_operator_.reset(
       BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kAdd)
           .makeUncheckedBinaryOperatorForTypes(sum_type, sum_type));
+  merge_functor_ = merge_operator_->getMergeFunctor();
 
-  // Result is nullable, because SUM() over 0 values (or all NULL values) is
-  // NULL.
-  result_type_ = &sum_type.getNullableVersion();
+  finalize_functor_ = MakeUntypedCopyFunctor(&sum_type);
+  result_type_ = &sum_type;
 }
 
-AggregationStateHashTableBase* AggregationHandleSum::createGroupByHashTable(
-    const HashTableImplType hash_table_impl,
-    const std::vector<const Type *> &group_by_types,
-    const std::size_t estimated_num_groups,
-    StorageManager *storage_manager) const {
-  return AggregationStateHashTableFactory<AggregationStateSum>::CreateResizable(
-      hash_table_impl, group_by_types, estimated_num_groups, storage_manager);
-}
-
-AggregationState* AggregationHandleSum::accumulateColumnVectors(
+void AggregationHandleSum::accumulateColumnVectors(
+    void *state,
     const std::vector<std::unique_ptr<ColumnVector>> &column_vectors) const {
   DCHECK_EQ(1u, column_vectors.size())
       << "Got wrong number of ColumnVectors for SUM: " << column_vectors.size();
   std::size_t num_tuples = 0;
-  TypedValue cv_sum = fast_operator_->accumulateColumnVector(
-      blank_state_.sum_, *column_vectors.front(), &num_tuples);
-  return new AggregationStateSum(std::move(cv_sum), num_tuples == 0);
+  TypedValue cv_sum = accumulate_operator_->accumulateColumnVector(
+      tv_blank_state_, *column_vectors.front(), &num_tuples);
+  cv_sum.copyInto(state);
 }
 
 #ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
-AggregationState* AggregationHandleSum::accumulateValueAccessor(
+void AggregationHandleSum::accumulateValueAccessor(
+    void *state,
     ValueAccessor *accessor,
     const std::vector<attribute_id> &accessor_ids) const {
   DCHECK_EQ(1u, accessor_ids.size())
       << "Got wrong number of attributes for SUM: " << accessor_ids.size();
 
   std::size_t num_tuples = 0;
-  TypedValue va_sum = fast_operator_->accumulateValueAccessor(
-      blank_state_.sum_, accessor, accessor_ids.front(), &num_tuples);
-  return new AggregationStateSum(std::move(va_sum), num_tuples == 0);
+  TypedValue va_sum = accumulate_operator_->accumulateValueAccessor(
+      tv_blank_state_, accessor, accessor_ids.front(), &num_tuples);
+  va_sum.copyInto(state);
 }
 #endif
-
-void AggregationHandleSum::aggregateValueAccessorIntoHashTable(
-    ValueAccessor *accessor,
-    const std::vector<attribute_id> &argument_ids,
-    const std::vector<attribute_id> &group_by_key_ids,
-    AggregationStateHashTableBase *hash_table) const {
-  DCHECK_EQ(1u, argument_ids.size())
-      << "Got wrong number of arguments for SUM: " << argument_ids.size();
-}
-
-void AggregationHandleSum::mergeStates(const AggregationState &source,
-                                       AggregationState *destination) const {
-  const AggregationStateSum &sum_source =
-      static_cast<const AggregationStateSum &>(source);
-  AggregationStateSum *sum_destination =
-      static_cast<AggregationStateSum *>(destination);
-
-  SpinMutexLock lock(sum_destination->mutex_);
-  sum_destination->sum_ = merge_operator_->applyToTypedValues(
-      sum_destination->sum_, sum_source.sum_);
-  sum_destination->null_ = sum_destination->null_ && sum_source.null_;
-}
-
-void AggregationHandleSum::mergeStatesFast(const std::uint8_t *source,
-                                           std::uint8_t *destination) const {
-  const TypedValue *src_sum_ptr =
-      reinterpret_cast<const TypedValue *>(source + blank_state_.sum_offset_);
-  const bool *src_null_ptr =
-      reinterpret_cast<const bool *>(source + blank_state_.null_offset_);
-  TypedValue *dst_sum_ptr =
-      reinterpret_cast<TypedValue *>(destination + blank_state_.sum_offset_);
-  bool *dst_null_ptr =
-      reinterpret_cast<bool *>(destination + blank_state_.null_offset_);
-  *dst_sum_ptr =
-      merge_operator_->applyToTypedValues(*dst_sum_ptr, *src_sum_ptr);
-  *dst_null_ptr = (*dst_null_ptr) && (*src_null_ptr);
-}
-
-TypedValue AggregationHandleSum::finalize(const AggregationState &state) const {
-  const AggregationStateSum &agg_state =
-      static_cast<const AggregationStateSum &>(state);
-  if (agg_state.null_) {
-    // SUM() over no values is NULL.
-    return result_type_->makeNullValue();
-  } else {
-    return agg_state.sum_;
-  }
-}
-
-ColumnVector* AggregationHandleSum::finalizeHashTable(
-    const AggregationStateHashTableBase &hash_table,
-    std::vector<std::vector<TypedValue>> *group_by_keys,
-    int index) const {
-  return finalizeHashTableHelperFast<AggregationHandleSum,
-                                     AggregationStateFastHashTable>(
-      *result_type_, hash_table, group_by_keys, index);
-}
-
-AggregationState*
-AggregationHandleSum::aggregateOnDistinctifyHashTableForSingle(
-    const AggregationStateHashTableBase &distinctify_hash_table) const {
-  return aggregateOnDistinctifyHashTableForSingleUnaryHelperFast<
-      AggregationHandleSum,
-      AggregationStateSum>(distinctify_hash_table);
-}
-
-void AggregationHandleSum::aggregateOnDistinctifyHashTableForGroupBy(
-    const AggregationStateHashTableBase &distinctify_hash_table,
-    AggregationStateHashTableBase *aggregation_hash_table,
-    std::size_t index) const {
-  aggregateOnDistinctifyHashTableForGroupByUnaryHelperFast<
-      AggregationHandleSum,
-      AggregationStateFastHashTable>(
-      distinctify_hash_table, aggregation_hash_table, index);
-}
 
 }  // namespace quickstep

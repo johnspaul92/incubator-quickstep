@@ -34,6 +34,7 @@
 #include "storage/HashTablePool.hpp"
 #include "storage/StorageBlockInfo.hpp"
 #include "utility/Macros.hpp"
+#include "utility/ScopedBuffer.hpp"
 
 namespace quickstep {
 
@@ -167,8 +168,8 @@ class AggregationOperationState {
    **/
   void finalizeAggregate(InsertDestination *output_destination);
 
-  static void mergeGroupByHashTables(AggregationStateHashTableBase *src,
-                                     AggregationStateHashTableBase *dst);
+  static void mergeGroupByHashTables(AggregationStateHashTableBase *destination_hash_table,
+                                     const AggregationStateHashTableBase *source_hash_table);
 
   int dflag;
 
@@ -176,7 +177,7 @@ class AggregationOperationState {
   // Merge locally (per storage block) aggregated states with global aggregation
   // states.
   void mergeSingleState(
-      const std::vector<std::unique_ptr<AggregationState>> &local_state);
+      const std::vector<ScopedBuffer> &local_state);
 
   // Aggregate on input block.
   void aggregateBlockSingleState(const block_id input_block);
@@ -201,10 +202,6 @@ class AggregationOperationState {
   // arguments.
   std::vector<bool> is_distinct_;
 
-  // Hash table for obtaining distinct (i.e. unique) arguments.
-  std::vector<std::unique_ptr<AggregationStateHashTableBase>>
-      distinctify_hashtables_;
-
 #ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
   // If all an aggregate's argument expressions are simply attributes in
   // 'input_relation_', then this caches the attribute IDs of those arguments.
@@ -212,14 +209,7 @@ class AggregationOperationState {
 #endif
 
   // Per-aggregate global states for aggregation without GROUP BY.
-  std::vector<std::unique_ptr<AggregationState>> single_states_;
-
-  // Per-aggregate HashTables for aggregation with GROUP BY.
-  //
-  // TODO(shoban): We should ideally store the aggregation state together in one
-  // hash table to prevent multiple lookups.
-  std::vector<std::unique_ptr<AggregationStateHashTableBase>>
-      group_by_hashtables_;
+  std::vector<ScopedBuffer> single_states_;
 
   // A vector of group by hash table pools.
   std::unique_ptr<HashTablePool> group_by_hashtable_pool_;

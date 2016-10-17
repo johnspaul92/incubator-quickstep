@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "types/Type.hpp"
@@ -105,6 +106,9 @@ class NullType : public Type {
 
   bool canCheckEqualityWithMemcmp() const override {
     return true;
+  }
+
+  void makeZeroValue(void *value_ptr) const override {
   }
 
  private:

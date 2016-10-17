@@ -33,6 +33,7 @@
 
 namespace quickstep {
 
+class AggregationResultIterator;
 class CatalogRelationSchema;
 class ComparisonPredicate;
 class TupleStorageSubBlockDescription;
@@ -143,6 +144,8 @@ class PackedRowStoreTupleStorageSubBlock: public TupleStorageSubBlock {
   }
 
   tuple_id bulkInsertTuples(ValueAccessor *accessor) override;
+
+  tuple_id bulkInsertAggregationResults(AggregationResultIterator *results) override;
 
   tuple_id bulkInsertTuplesWithRemappedAttributes(
       const std::vector<attribute_id> &attribute_map,
