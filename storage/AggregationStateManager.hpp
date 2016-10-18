@@ -28,6 +28,7 @@
 #include "catalog/CatalogTypedefs.hpp"
 #include "threading/SpinMutex.hpp"
 #include "threading/SpinSharedMutex.hpp"
+#include "types/containers/ColumnVectorsValueAccessor.hpp"
 #include "utility/InlineMemcpy.hpp"
 #include "utility/Macros.hpp"
 #include "utility/ScopedBuffer.hpp"
@@ -71,8 +72,7 @@ class AggregationStateManager {
       new(initial_states_.get()) Mutex;
     }
     for (std::size_t i = 0; i < handles_.size(); ++i) {
-      handles_[i]->initializeState(
-          static_cast<char *>(initial_states_.get()) + state_offsets_[i]);
+      handles_[i]->initializeState(getStateComponent(initial_states_.get(), i));
     }
   }
 
@@ -88,33 +88,39 @@ class AggregationStateManager {
     copyStates(states, initial_states_.get());
   }
 
-  template <bool check_for_null_keys, typename ValueAccessorT>
-  inline void updateState(void *states,
-                          ValueAccessorT *accessor,
-                          const attribute_id argument_id) const {
-    // TODO: templates on whether to check invalid attribute id
-    DCHECK_NE(argument_id, kInvalidAttributeID);
-
-    const void *value =
-        accessor->template getUntypedValue<check_for_null_keys>(argument_id);
-    if (check_for_null_keys && value == nullptr) {
-      return;
-    }
-    accumulate_functors_.front()(states, value);
-  }
-
-  template <bool check_for_null_keys, typename ValueAccessorT>
+  template <typename ValueAccessorT>
   inline void updateStates(void *states,
                            ValueAccessorT *accessor,
                            const std::vector<attribute_id> &argument_ids) const {
     for (std::size_t i = 0; i < argument_ids.size(); ++i) {
       // TODO: templates on whether to check invalid attribute id
-      DCHECK_NE(argument_ids[i], kInvalidAttributeID);
+      const void *value;
+      const attribute_id argument_id = argument_ids[i];
+      if (argument_id == kInvalidAttributeID) {
+        value = nullptr;
+      } else {
+        value = accessor->template getUntypedValue<false>(argument_id);
+       // TODO: check null
+      }
+      accumulate_functors_[i](getStateComponent(states, i), value);
+    }
+  }
 
-      const void *value =
-          accessor->template getUntypedValue<check_for_null_keys>(argument_ids[i]);
-      if (check_for_null_keys && value == nullptr) {
-        return;
+  template <typename ValueAccessorT>
+  inline void updateStates(void *states,
+                           ValueAccessorT *accessor,
+                           ColumnVectorsValueAccessor *temp_accessor,
+                           const std::vector<attribute_id> &argument_ids) const {
+    for (std::size_t i = 0; i < argument_ids.size(); ++i) {
+      // TODO: templates on whether to check invalid attribute id
+      const void *value = nullptr;
+      const attribute_id argument_id = argument_ids[i];
+      if (argument_id >= 0) {
+        value = accessor->template getUntypedValue<false>(argument_id);
+        // TODO: check null
+      } else if (argument_id != kInvalidAttributeID){
+        value = temp_accessor->template getUntypedValue<false>(-(argument_id+2));
+        // TODO: check null
       }
       accumulate_functors_[i](getStateComponent(states, i), value);
     }

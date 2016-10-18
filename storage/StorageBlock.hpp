@@ -462,11 +462,9 @@ class StorageBlock : public StorageBlockBase {
    */
   void aggregateGroupBy(
       const std::vector<std::vector<std::unique_ptr<const Scalar>>> &arguments,
-      const std::vector<std::unique_ptr<const Scalar>> &group_by,
+      const std::vector<attribute_id> &group_by_attribute_ids,
       const Predicate *predicate,
-      AggregationStateHashTableBase *hash_table,
-      std::unique_ptr<TupleIdSequence> *reuse_matches,
-      std::vector<std::unique_ptr<ColumnVector>> *reuse_group_by_vectors) const;
+      AggregationStateHashTableBase *hash_table) const;
 
   /**
    * @brief Perform an UPDATE query over the tuples in this StorageBlock.

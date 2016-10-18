@@ -46,6 +46,7 @@
 #include "threading/SpinSharedMutex.hpp"
 #include "types/Type.hpp"
 #include "types/TypeFunctors.hpp"
+#include "types/containers/ColumnVectorsValueAccessor.hpp"
 #include "utility/Alignment.hpp"
 #include "utility/InlineMemcpy.hpp"
 #include "utility/Macros.hpp"
@@ -112,52 +113,66 @@ class ThreadPrivateAggregationStateHashTable : public AggregationStateHashTableB
   }
 
   bool upsertValueAccessor(ValueAccessor *accessor,
+                           ColumnVectorsValueAccessor *temp_accessor,
                            const attribute_id key_attr_id,
                            const std::vector<attribute_id> &argument_ids) override {
-    if (key_manager_.isKeyNullable()) {
-      return upsertValueAccessorInternal<true>(
-          accessor, key_attr_id, argument_ids);
-    } else {
-      return upsertValueAccessorInternal<false>(
-          accessor, key_attr_id, argument_ids);
-    }
+//    if (key_manager_.isKeyNullable()) {
+//      return upsertValueAccessorInternal<true>(
+//          accessor, key_attr_id, argument_ids);
+//    } else {
+//      return upsertValueAccessorInternal<false>(
+//          accessor, key_attr_id, argument_ids);
+//    }
+    return true;
   }
-
-  template <bool check_for_null_keys>
-  bool upsertValueAccessorInternal(ValueAccessor *accessor,
-                                   const attribute_id key_attr_id,
-                                   const std::vector<attribute_id> &argument_ids) {
-    return InvokeOnAnyValueAccessor(
-        accessor,
-        [&](auto *accessor) -> bool {  // NOLINT(build/c++11)
-      accessor->beginIteration();
-      while (accessor->next()) {
-        const void *key = accessor->template getUntypedValue<check_for_null_keys>(key_attr_id);
-        if (check_for_null_keys && key == nullptr) {
-          continue;
-        }
-        bool is_empty;
-        void *bucket = locateBucket(key, &is_empty);
-        if (is_empty) {
-          payload_manager_.initializeStates(bucket);
-        } else {
-          payload_manager_.template updateStates<check_for_null_keys>(
-              bucket, accessor, argument_ids);
-        }
-      }
-      return true;
-    });
-  }
+//
+//  template <bool check_for_null_keys>
+//  bool upsertValueAccessorInternal(ValueAccessor *accessor,
+//                                   const attribute_id key_attr_id,
+//                                   const std::vector<attribute_id> &argument_ids) {
+//    return InvokeOnAnyValueAccessor(
+//        accessor,
+//        [&](auto *accessor) -> bool {  // NOLINT(build/c++11)
+//      accessor->beginIteration();
+//      while (accessor->next()) {
+//        const void *key = accessor->template getUntypedValue<check_for_null_keys>(key_attr_id);
+//        if (check_for_null_keys && key == nullptr) {
+//          continue;
+//        }
+//        void *bucket = locateBucket(key);
+//        payload_manager_.template updateStates<check_for_null_keys>(
+//            bucket, accessor, argument_ids);
+//      }
+//      return true;
+//    });
+//  }
 
   bool upsertValueAccessorCompositeKey(ValueAccessor *accessor,
+                                       ColumnVectorsValueAccessor *temp_accessor,
                                        const std::vector<attribute_id> &key_attr_ids,
                                        const std::vector<attribute_id> &argument_ids) override {
-    if (key_manager_.isKeyNullable()) {
-      return upsertValueAccessorCompositeKeyInternal<true>(
-          accessor, key_attr_ids, argument_ids);
+//    if (key_attr_ids.size() == 1) {
+//      upsertValueAccessor(accessor,
+//                          key_attr_ids.front(),
+//                          argument_ids);
+//    }
+
+    if (temp_accessor == nullptr) {
+      if (key_manager_.isKeyNullable()) {
+        return upsertValueAccessorCompositeKeyInternal<true>(
+            accessor, key_attr_ids, argument_ids);
+      } else {
+        return upsertValueAccessorCompositeKeyInternal<false>(
+            accessor, key_attr_ids, argument_ids);
+      }
     } else {
-      return upsertValueAccessorCompositeKeyInternal<false>(
-          accessor, key_attr_ids, argument_ids);
+      if (key_manager_.isKeyNullable()) {
+        return upsertValueAccessorCompositeKeyInternal<true>(
+            accessor, temp_accessor, key_attr_ids, argument_ids);
+      } else {
+        return upsertValueAccessorCompositeKeyInternal<false>(
+            accessor, temp_accessor, key_attr_ids, argument_ids);
+      }
     }
   }
 
@@ -186,30 +201,69 @@ class ThreadPrivateAggregationStateHashTable : public AggregationStateHashTableB
               key_attr_ids,
               prealloc_bucket);
         }
-        void *bucket = locateBucketWithPrealloc(prealloc_bucket);
-        if (bucket == prealloc_bucket) {
-          payload_manager_.initializeStates(bucket);
-          prealloc_bucket = allocateBucket();
-        } else {
-          payload_manager_.template updateStates<check_for_null_keys>(
-              bucket, accessor, argument_ids);
-        }
+        void *bucket = locateBucketWithPrealloc(&prealloc_bucket);
+        payload_manager_.updateStates(
+            bucket, accessor, argument_ids);
       }
       // Reclaim the last unused bucket
       --buckets_allocated_;
       return true;
     });
+    return true;
+  }
+
+  template <bool check_for_null_keys>
+  bool upsertValueAccessorCompositeKeyInternal(ValueAccessor *accessor,
+                                               ColumnVectorsValueAccessor *temp_accessor,
+                                               const std::vector<attribute_id> &key_attr_ids,
+                                               const std::vector<attribute_id> &argument_ids) {
+    return InvokeOnAnyValueAccessor(
+        accessor,
+        [&](auto *accessor) -> bool {  // NOLINT(build/c++11)
+      accessor->beginIteration();
+      temp_accessor->beginIteration();
+      void *prealloc_bucket = allocateBucket();
+      while (accessor->next()) {
+        temp_accessor->next();
+
+        if (check_for_null_keys) {
+          const bool is_null =
+              key_manager_.writeNullableUntypedKeyFromValueAccessorToBucket(
+                  accessor,
+                  key_attr_ids,
+                  prealloc_bucket);
+          if (is_null) {
+            continue;
+          }
+        } else {
+          key_manager_.writeUntypedKeyFromValueAccessorToBucket(
+              accessor,
+              key_attr_ids,
+              prealloc_bucket);
+        }
+
+        void *bucket = locateBucketWithPrealloc(&prealloc_bucket);
+        payload_manager_.updateStates(
+            bucket, accessor, temp_accessor, argument_ids);
+      }
+      // Reclaim the last unused bucket
+      --buckets_allocated_;
+      return true;
+    });
+    return true;
   }
 
   void mergeHashTable(const ThreadPrivateAggregationStateHashTable *source_hash_table) {
     source_hash_table->forEachKeyAndStates(
         [&](const void *source_key, const void *source_states) -> void {
-          bool is_empty;
-          void *bucket = locateBucket(source_key, &is_empty);
-          if (is_empty) {
+          auto slot_it = slots_.find(source_key);
+          if (slot_it == slots_.end()) {
+            void *bucket = allocateBucket();
+            key_manager_.writeUntypedKeyToBucket(source_key, bucket);
             payload_manager_.copyStates(bucket, source_states);
+            slots_.emplace(key_manager_.getUntypedKeyComponent(bucket), bucket);
           } else {
-            payload_manager_.mergeStates(bucket, source_states);
+            payload_manager_.mergeStates(slot_it->second, source_states);
           }
         });
   }
@@ -233,26 +287,28 @@ class ThreadPrivateAggregationStateHashTable : public AggregationStateHashTableB
     return static_cast<char *>(buckets_) + bucket_id * bucket_size_;
   }
 
-  inline void* locateBucket(const void *key, bool *is_empty) {
+  inline void* locateBucket(const void *key) {
     auto slot_it = slots_.find(key);
     if (slot_it == slots_.end()) {
       void *bucket = allocateBucket();
       key_manager_.writeUntypedKeyToBucket(key, bucket);
+      payload_manager_.initializeStates(bucket);
       slots_.emplace(key_manager_.getUntypedKeyComponent(bucket), bucket);
-      *is_empty = true;
       return bucket;
     } else {
-      *is_empty = false;
       return slot_it->second;
     }
   }
 
-  inline void* locateBucketWithPrealloc(void *prealloc_bucket) {
-    const void *key = key_manager_.getUntypedKeyComponent(prealloc_bucket);
+  inline void* locateBucketWithPrealloc(void **prealloc_bucket) {
+    void *bucket = *prealloc_bucket;
+    const void *key = key_manager_.getUntypedKeyComponent(bucket);
     auto slot_it = slots_.find(key);
     if (slot_it == slots_.end()) {
-      slots_.emplace(key, prealloc_bucket);
-      return prealloc_bucket;
+      payload_manager_.initializeStates(bucket);
+      slots_.emplace(key, bucket);
+      *prealloc_bucket = allocateBucket();
+      return bucket;
     } else {
       return slot_it->second;
     }
@@ -295,7 +351,7 @@ class ThreadPrivateAggregationStateHashTable : public AggregationStateHashTableB
     std::cerr << "Buckets: \n";
     for (const auto &pair : slots_) {
       std::cerr << pair.first << " -- " << pair.second << "\n";
-      std::cerr << *static_cast<const int *>(pair.second) << "\n";
+      std::cerr << *static_cast<const std::uint64_t *>(pair.second) << "\n";
     }
   }
 
@@ -335,4 +391,3 @@ class ThreadPrivateAggregationStateHashTable : public AggregationStateHashTableB
 }  // namespace quickstep
 
 #endif  // QUICKSTEP_STORAGE_AGGREGATION_STATE_HASH_TABLE_HPP_
-

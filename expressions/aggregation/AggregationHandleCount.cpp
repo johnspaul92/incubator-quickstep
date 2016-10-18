@@ -49,7 +49,10 @@ class ValueAccessor;
 template <bool count_star, bool nullable_type>
 AggregationHandleCount<count_star, nullable_type>::AggregationHandleCount() {
   state_size_ = sizeof(ResultCppType);
-  blank_state_.reset(state_size_, true);
+  blank_state_.reset(state_size_, false);
+
+  result_type_ = &TypeFactory::GetType(ResultType::kStaticTypeID);
+  result_type_->makeZeroValue(blank_state_.get());
 
   accumulate_functor_ = [](void *state, const void *value) {
     *static_cast<ResultCppType *>(state) += 1;
@@ -65,7 +68,6 @@ AggregationHandleCount<count_star, nullable_type>::AggregationHandleCount() {
         *static_cast<const ResultCppType *>(state);
   };
 
-  result_type_ = &TypeFactory::GetType(ResultType::kStaticTypeID);
 }
 
 template <bool count_star, bool nullable_type>

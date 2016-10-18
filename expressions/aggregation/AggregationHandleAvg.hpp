@@ -28,6 +28,7 @@
 #include "catalog/CatalogTypedefs.hpp"
 #include "expressions/aggregation/AggregationHandle.hpp"
 #include "storage/HashTableBase.hpp"
+#include "types/LongType.hpp"
 #include "types/Type.hpp"
 #include "types/TypedValue.hpp"
 #include "types/operations/binary_operations/BinaryOperation.hpp"
@@ -52,6 +53,17 @@ class AggregationHandleAvg : public AggregationHandle {
  public:
   ~AggregationHandleAvg() override {}
 
+  void accumulateColumnVectors(
+      void *state,
+      const std::vector<std::unique_ptr<ColumnVector>> &column_vectors) const override;
+
+#ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
+  void accumulateValueAccessor(
+      void *state,
+      ValueAccessor *accessor,
+      const std::vector<attribute_id> &accessor_ids) const override;
+#endif
+
  private:
   friend class AggregateFunctionAvg;
 
@@ -60,14 +72,19 @@ class AggregationHandleAvg : public AggregationHandle {
    *
    * @param type Type of the avg value.
    **/
-  explicit AggregationHandleAvg(const Type &type);
+  explicit AggregationHandleAvg(const Type &argument_type);
 
-//  const Type &argument_type_;
-//  const Type *result_type_;
-//  AggregationStateAvg blank_state_;
-//  std::unique_ptr<UncheckedBinaryOperator> fast_add_operator_;
-//  std::unique_ptr<UncheckedBinaryOperator> merge_add_operator_;
-//  std::unique_ptr<UncheckedBinaryOperator> divide_operator_;
+  typedef LongType CountType;
+  typedef CountType::cpptype CountCppType;
+
+    // TODO: temporary
+  TypedValue tv_blank_sum_;
+
+  std::size_t count_offset_;
+
+  std::unique_ptr<UncheckedBinaryOperator> accumulate_add_operator_;
+  std::unique_ptr<UncheckedBinaryOperator> merge_add_operator_;
+  std::unique_ptr<UncheckedBinaryOperator> divide_operator_;
 
   DISALLOW_COPY_AND_ASSIGN(AggregationHandleAvg);
 };

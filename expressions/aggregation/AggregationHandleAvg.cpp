@@ -24,8 +24,6 @@
 #include <vector>
 
 #include "catalog/CatalogTypedefs.hpp"
-#include "storage/HashTable.hpp"
-#include "storage/HashTableFactory.hpp"
 #include "types/Type.hpp"
 #include "types/TypeFactory.hpp"
 #include "types/TypeID.hpp"
@@ -40,165 +38,113 @@ namespace quickstep {
 
 class StorageManager;
 
-AggregationHandleAvg::AggregationHandleAvg(const Type &type) {}
-//    : argument_type_(type), block_update_(false) {
-//  // We sum Int as Long and Float as Double so that we have more headroom when
-//  // adding many values.
-//  TypeID type_precision_id;
-//  switch (type.getTypeID()) {
-//    case kInt:
-//    case kLong:
-//      type_precision_id = kLong;
-//      break;
-//    case kFloat:
-//    case kDouble:
-//      type_precision_id = kDouble;
-//      break;
-//    default:
-//      type_precision_id = type.getTypeID();
-//      break;
-//  }
-//
-//  const Type &sum_type = TypeFactory::GetType(type_precision_id);
-//  blank_state_.sum_ = sum_type.makeZeroValue();
-//  blank_state_.count_ = 0;
-//
-//  // Make operators to do arithmetic:
-//  // Add operator for summing argument values.
-//  fast_add_operator_.reset(
-//      BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kAdd)
-//          .makeUncheckedBinaryOperatorForTypes(sum_type, argument_type_));
-//  // Add operator for merging states.
-//  merge_add_operator_.reset(
-//      BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kAdd)
-//          .makeUncheckedBinaryOperatorForTypes(sum_type, sum_type));
-//  // Divide operator for dividing sum by count to get final average.
-//  divide_operator_.reset(
-//      BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kDivide)
-//          .makeUncheckedBinaryOperatorForTypes(sum_type,
-//                                               TypeFactory::GetType(kDouble)));
-//
-//  // Result is nullable, because AVG() over 0 values (or all NULL values) is
-//  // NULL.
-//  result_type_ =
-//      &(BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kDivide)
-//            .resultTypeForArgumentTypes(sum_type, TypeFactory::GetType(kDouble))
-//            ->getNullableVersion());
-//}
-//
-//AggregationStateHashTableBase* AggregationHandleAvg::createGroupByHashTable(
-//    const HashTableImplType hash_table_impl,
-//    const std::vector<const Type *> &group_by_types,
-//    const std::size_t estimated_num_groups,
-//    StorageManager *storage_manager) const {
-//  return AggregationStateHashTableFactory<AggregationStateAvg>::CreateResizable(
-//      hash_table_impl, group_by_types, estimated_num_groups, storage_manager);
-//}
-//
-//AggregationState* AggregationHandleAvg::accumulateColumnVectors(
-//    const std::vector<std::unique_ptr<ColumnVector>> &column_vectors) const {
-//  DCHECK_EQ(1u, column_vectors.size())
-//      << "Got wrong number of ColumnVectors for AVG: " << column_vectors.size();
-//
-//  AggregationStateAvg *state = new AggregationStateAvg(blank_state_);
-//  std::size_t count = 0;
-//  state->sum_ = fast_add_operator_->accumulateColumnVector(
-//      state->sum_, *column_vectors.front(), &count);
-//  state->count_ = count;
-//  return state;
-//}
-//
-//#ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
-//AggregationState* AggregationHandleAvg::accumulateValueAccessor(
-//    ValueAccessor *accessor,
-//    const std::vector<attribute_id> &accessor_ids) const {
-//  DCHECK_EQ(1u, accessor_ids.size())
-//      << "Got wrong number of attributes for AVG: " << accessor_ids.size();
-//
-//  AggregationStateAvg *state = new AggregationStateAvg(blank_state_);
-//  std::size_t count = 0;
-//  state->sum_ = fast_add_operator_->accumulateValueAccessor(
-//      state->sum_, accessor, accessor_ids.front(), &count);
-//  state->count_ = count;
-//  return state;
-//}
-//#endif
-//
-//void AggregationHandleAvg::aggregateValueAccessorIntoHashTable(
-//    ValueAccessor *accessor,
-//    const std::vector<attribute_id> &argument_ids,
-//    const std::vector<attribute_id> &group_by_key_ids,
-//    AggregationStateHashTableBase *hash_table) const {
-//  DCHECK_EQ(1u, argument_ids.size())
-//      << "Got wrong number of arguments for AVG: " << argument_ids.size();
-//}
-//
-//void AggregationHandleAvg::mergeStates(const AggregationState &source,
-//                                       AggregationState *destination) const {
-//  const AggregationStateAvg &avg_source =
-//      static_cast<const AggregationStateAvg &>(source);
-//  AggregationStateAvg *avg_destination =
-//      static_cast<AggregationStateAvg *>(destination);
-//
-//  SpinMutexLock lock(avg_destination->mutex_);
-//  avg_destination->count_ += avg_source.count_;
-//  avg_destination->sum_ = merge_add_operator_->applyToTypedValues(
-//      avg_destination->sum_, avg_source.sum_);
-//}
-//
-//void AggregationHandleAvg::mergeStatesFast(const std::uint8_t *source,
-//                                           std::uint8_t *destination) const {
-//  const TypedValue *src_sum_ptr =
-//      reinterpret_cast<const TypedValue *>(source + blank_state_.sum_offset_);
-//  const std::int64_t *src_count_ptr = reinterpret_cast<const std::int64_t *>(
-//      source + blank_state_.count_offset_);
-//  TypedValue *dst_sum_ptr =
-//      reinterpret_cast<TypedValue *>(destination + blank_state_.sum_offset_);
-//  std::int64_t *dst_count_ptr = reinterpret_cast<std::int64_t *>(
-//      destination + blank_state_.count_offset_);
-//  (*dst_count_ptr) += (*src_count_ptr);
-//  *dst_sum_ptr =
-//      merge_add_operator_->applyToTypedValues(*dst_sum_ptr, *src_sum_ptr);
-//}
-//
-//TypedValue AggregationHandleAvg::finalize(const AggregationState &state) const {
-//  const AggregationStateAvg &agg_state =
-//      static_cast<const AggregationStateAvg &>(state);
-//  if (agg_state.count_ == 0) {
-//    // AVG() over no values is NULL.
-//    return result_type_->makeNullValue();
-//  } else {
-//    // Divide sum by count to get final average.
-//    return divide_operator_->applyToTypedValues(
-//        agg_state.sum_, TypedValue(static_cast<double>(agg_state.count_)));
-//  }
-//}
-//
-//ColumnVector* AggregationHandleAvg::finalizeHashTable(
-//    const AggregationStateHashTableBase &hash_table,
-//    std::vector<std::vector<TypedValue>> *group_by_keys,
-//    int index) const {
-//  return finalizeHashTableHelperFast<AggregationHandleAvg,
-//                                     AggregationStateFastHashTable>(
-//      *result_type_, hash_table, group_by_keys, index);
-//}
-//
-//AggregationState*
-//AggregationHandleAvg::aggregateOnDistinctifyHashTableForSingle(
-//    const AggregationStateHashTableBase &distinctify_hash_table) const {
-//  return aggregateOnDistinctifyHashTableForSingleUnaryHelperFast<
-//      AggregationHandleAvg,
-//      AggregationStateAvg>(distinctify_hash_table);
-//}
-//
-//void AggregationHandleAvg::aggregateOnDistinctifyHashTableForGroupBy(
-//    const AggregationStateHashTableBase &distinctify_hash_table,
-//    AggregationStateHashTableBase *aggregation_hash_table,
-//    std::size_t index) const {
-//  aggregateOnDistinctifyHashTableForGroupByUnaryHelperFast<
-//      AggregationHandleAvg,
-//      AggregationStateFastHashTable>(
-//      distinctify_hash_table, aggregation_hash_table, index);
-//}
+AggregationHandleAvg::AggregationHandleAvg(const Type &argument_type) {
+  // We sum Int as Long and Float as Double so that we have more headroom when
+  // adding many values.
+  TypeID type_precision_id;
+  switch (argument_type.getTypeID()) {
+    case kInt:
+    case kLong:
+      type_precision_id = kLong;
+      break;
+    case kFloat:
+    case kDouble:
+      type_precision_id = kDouble;
+      break;
+    default:
+      type_precision_id = argument_type.getTypeID();
+      break;
+  }
+
+  const Type &sum_type = TypeFactory::GetType(type_precision_id);
+  const Type &count_type = TypeFactory::GetType(CountType::kStaticTypeID);
+
+  const std::size_t sum_state_size = sum_type.maximumByteLength();
+  count_offset_ = sum_state_size;
+  state_size_ = sum_state_size + sizeof(CountCppType);
+
+  blank_state_.reset(state_size_, false);
+  sum_type.makeZeroValue(blank_state_.get());
+  count_type.makeZeroValue(static_cast<char *>(blank_state_.get()) + sum_state_size);
+
+  tv_blank_sum_ = sum_type.makeZeroValue();
+
+  // Make operators to do arithmetic:
+  // Add operator for summing argument values.
+  accumulate_add_operator_.reset(
+      BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kAdd)
+          .makeUncheckedBinaryOperatorForTypes(sum_type, argument_type));
+  const auto accumulate_add_functor = accumulate_add_operator_->getMergeFunctor();
+  accumulate_functor_ = [sum_state_size, accumulate_add_functor](
+      void *state, const void *value) {
+    accumulate_add_functor(state, value);
+    void *count_ptr = static_cast<char *>(state) + sum_state_size;
+    ++(*static_cast<CountCppType *>(count_ptr));
+  };
+
+  // Add operator for merging states.
+  merge_add_operator_.reset(
+      BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kAdd)
+          .makeUncheckedBinaryOperatorForTypes(sum_type, sum_type));
+  const auto merge_add_functor = merge_add_operator_->getMergeFunctor();
+  merge_functor_ = [sum_state_size, merge_add_functor](
+      void *destination_state, const void *source_state) {
+    merge_add_functor(destination_state, source_state);
+    void *destination_count_ptr =
+        static_cast<char *>(destination_state) + sum_state_size;
+    const void *source_count_ptr =
+        static_cast<const char *>(source_state) + sum_state_size;
+    *static_cast<CountCppType *>(destination_count_ptr) +=
+        *static_cast<const CountCppType *>(source_count_ptr);
+  };
+
+  // Divide operator for dividing sum by count to get final average.
+  divide_operator_.reset(
+      BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kDivide)
+          .makeUncheckedBinaryOperatorForTypes(sum_type,
+                                               TypeFactory::GetType(kDouble)));
+  const auto divide_functor = divide_operator_->getFunctor();
+  finalize_functor_ = [sum_state_size, divide_functor](
+      void *result, const void *state) {
+    const void *count_ptr = static_cast<const char *>(state) + sum_state_size;
+    const double count = *static_cast<const CountCppType *>(count_ptr);
+    divide_functor(result, state, &count);
+  };
+
+  result_type_ =
+      BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kDivide)
+          .resultTypeForArgumentTypes(sum_type, TypeFactory::GetType(kDouble));
+}
+
+void AggregationHandleAvg::accumulateColumnVectors(
+    void *state,
+    const std::vector<std::unique_ptr<ColumnVector>> &column_vectors) const {
+  DCHECK_EQ(1u, column_vectors.size())
+      << "Got wrong number of ColumnVectors for AVG: " << column_vectors.size();
+
+  std::size_t count = 0;
+  TypedValue cv_sum = accumulate_add_operator_->accumulateColumnVector(
+      tv_blank_sum_, *column_vectors.front(), &count);
+  cv_sum.copyInto(state);
+  void *count_ptr = static_cast<char *>(state) + count_offset_;
+  *static_cast<CountCppType *>(count_ptr) = count;
+}
+
+#ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
+void AggregationHandleAvg::accumulateValueAccessor(
+    void *state,
+    ValueAccessor *accessor,
+    const std::vector<attribute_id> &accessor_ids) const {
+  DCHECK_EQ(1u, accessor_ids.size())
+      << "Got wrong number of attributes for AVG: " << accessor_ids.size();
+
+  std::size_t count = 0;
+  TypedValue cv_sum = accumulate_add_operator_->accumulateValueAccessor(
+      tv_blank_sum_, accessor, accessor_ids.front(), &count);
+  cv_sum.copyInto(state);
+  void *count_ptr = static_cast<char *>(state) + count_offset_;
+  *static_cast<CountCppType *>(count_ptr) = count;
+}
+#endif
 
 }  // namespace quickstep

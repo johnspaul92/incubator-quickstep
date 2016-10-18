@@ -191,6 +191,7 @@ class AggregationOperationState {
   const CatalogRelationSchema &input_relation_;
   std::unique_ptr<const Predicate> predicate_;
   std::vector<std::unique_ptr<const Scalar>> group_by_list_;
+  std::vector<attribute_id> group_by_attribute_ids_;
 
   // Each individual aggregate in this operation has an AggregationHandle and
   // some number of Scalar arguments.

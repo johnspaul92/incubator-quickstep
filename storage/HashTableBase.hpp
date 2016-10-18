@@ -29,6 +29,7 @@
 namespace quickstep {
 
 class AggregationResultIterator;
+class ColumnVectorsValueAccessor;
 
 /** \addtogroup Storage
  *  @{
@@ -88,10 +89,12 @@ class AggregationStateHashTableBase {
   virtual ~AggregationStateHashTableBase() {}
 
   virtual bool upsertValueAccessor(ValueAccessor *accessor,
+                                   ColumnVectorsValueAccessor *temp_accessor,
                                    const attribute_id key_attr_id,
                                    const std::vector<attribute_id> &argument_ids) = 0;
 
   virtual bool upsertValueAccessorCompositeKey(ValueAccessor *accessor,
+                                               ColumnVectorsValueAccessor *temp_accessor,
                                                const std::vector<attribute_id> &key_attr_ids,
                                                const std::vector<attribute_id> &argument_ids) = 0;
 

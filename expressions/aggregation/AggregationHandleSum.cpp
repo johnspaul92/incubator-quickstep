@@ -66,6 +66,7 @@ AggregationHandleSum::AggregationHandleSum(const Type &argument_type) {
   state_size_ = sum_type.maximumByteLength();
   blank_state_.reset(state_size_, false);
 
+  sum_type.makeZeroValue(blank_state_.get());
   tv_blank_state_ = sum_type.makeZeroValue();
 
   // Make operators to do arithmetic:
