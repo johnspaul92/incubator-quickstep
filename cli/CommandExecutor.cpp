@@ -33,6 +33,8 @@
 #include "catalog/CatalogRelationSchema.hpp"
 #include "cli/DropRelation.hpp"
 #include "cli/PrintToScreen.hpp"
+#include "expressions/aggregation/AggregateFunctionMax.hpp"
+#include "expressions/aggregation/AggregateFunctionMin.hpp"
 #include "parser/ParseStatement.hpp"
 #include "parser/ParseString.hpp"
 #include "parser/SqlParserWrapper.hpp"
@@ -322,9 +324,26 @@ void executeAnalyze(const PtrVector<ParseString> *arguments,
 
     // Get the number of distinct values for each column.
     for (const CatalogAttribute &attribute : relation) {
+      const Type &attr_type = attribute.getType();
+      bool is_min_applicable =
+          AggregateFunctionMin::Instance().canApplyToTypes({&attr_type});
+      bool is_max_applicable =
+          AggregateFunctionMax::Instance().canApplyToTypes({&attr_type});
+
       std::string query_string = "SELECT COUNT(DISTINCT ";
       query_string.append(attribute.getName());
-      query_string.append(") FROM ");
+      query_string.append(")");
+      if (is_min_applicable) {
+        query_string.append(", MIN(");
+        query_string.append(attribute.getName());
+        query_string.append(")");
+      }
+      if (is_max_applicable) {
+        query_string.append(", MAX(");
+        query_string.append(attribute.getName());
+        query_string.append(")");
+      }
+      query_string.append(" FROM ");
       query_string.append(relation.getName());
       query_string.append(";");
 
@@ -340,9 +359,18 @@ void executeAnalyze(const PtrVector<ParseString> *arguments,
       auto *stat = mutable_relation->getStatisticsMutable();
       const attribute_id attr_id = attribute.getID();
 
-      DCHECK(results[0].getTypeID() == TypeID::kLong);
+      auto results_it = results.begin();
+      DCHECK(results_it->getTypeID() == TypeID::kLong);
       stat->setNumDistinctValues(attr_id,
-                                 results[0].getLiteral<std::int64_t>());
+                                 results_it->getLiteral<std::int64_t>());
+      if (is_min_applicable) {
+        ++results_it;
+        stat->setMinValue(attr_id, *results_it);
+      }
+      if (is_max_applicable) {
+        ++results_it;
+        stat->setMaxValue(attr_id, *results_it);
+      }
     }
 
     // Get the number of tuples for the relation.

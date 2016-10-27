@@ -84,6 +84,7 @@ typedef quickstep::LineReaderDumb LineReaderImpl;
 #include "gflags/gflags.h"
 
 #include "glog/logging.h"
+#include "google/protobuf/text_format.h"
 
 #include "tmb/address.h"
 #include "tmb/id_typedefs.h"
@@ -299,6 +300,11 @@ int main(int argc, char* argv[]) {
   } catch (...) {
     LOG(FATAL) << "NON-STANDARD EXCEPTION DURING STARTUP";
   }
+
+  std::string str;
+  google::protobuf::TextFormat::PrintToString(
+      query_processor->getDefaultDatabase()->getProto(), &str);
+  std::cerr << str << "\n";
 
   // Parse the CPU affinities for workers and the preloader thread, if enabled
   // to warm up the buffer pool.
