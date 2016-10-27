@@ -62,21 +62,13 @@ class AggregationHandleDistinct : public AggregationConcreteHandle {
         << "AggregationHandleDistinct does not support accumulateNullary().";
   }
 
-  AggregationState* accumulateColumnVectors(
-      const std::vector<std::unique_ptr<ColumnVector>> &column_vectors)
-      const override {
-    LOG(FATAL) << "AggregationHandleDistinct does not support "
-                  "accumulateColumnVectors().";
-  }
-
-#ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
-  AggregationState* accumulateValueAccessor(
+  AggregationState* accumulate(
       ValueAccessor *accessor,
-      const std::vector<attribute_id> &accessor_ids) const override {
+      ColumnVectorsValueAccessor *aux_accessor,
+      const std::vector<attribute_id> &argument_ids) const override {
     LOG(FATAL) << "AggregationHandleDistinct does not support "
-                  "accumulateValueAccessor().";
+                  "accumulate().";
   }
-#endif
 
   void mergeStates(const AggregationState &source,
                    AggregationState *destination) const override {
@@ -86,33 +78,6 @@ class AggregationHandleDistinct : public AggregationConcreteHandle {
   TypedValue finalize(const AggregationState &state) const override {
     LOG(FATAL) << "AggregationHandleDistinct does not support finalize().";
   }
-
-  AggregationState* aggregateOnDistinctifyHashTableForSingle(
-      const AggregationStateHashTableBase &distinctify_hash_table)
-      const override {
-    LOG(FATAL) << "AggregationHandleDistinct does not support "
-               << "aggregateOnDistinctifyHashTableForSingle().";
-  }
-
-  void aggregateOnDistinctifyHashTableForGroupBy(
-      const AggregationStateHashTableBase &distinctify_hash_table,
-      AggregationStateHashTableBase *groupby_hash_table,
-      std::size_t index) const override {
-    LOG(FATAL) << "AggregationHandleDistinct does not support "
-               << "aggregateOnDistinctifyHashTableForGroupBy().";
-  }
-
-  AggregationStateHashTableBase* createGroupByHashTable(
-      const HashTableImplType hash_table_impl,
-      const std::vector<const Type *> &group_by_types,
-      const std::size_t estimated_num_groups,
-      StorageManager *storage_manager) const override;
-
-  void aggregateValueAccessorIntoHashTable(
-      ValueAccessor *accessor,
-      const std::vector<attribute_id> &argument_ids,
-      const std::vector<attribute_id> &group_by_key_ids,
-      AggregationStateHashTableBase *hash_table) const override;
 
   ColumnVector* finalizeHashTable(
       const AggregationStateHashTableBase &hash_table,

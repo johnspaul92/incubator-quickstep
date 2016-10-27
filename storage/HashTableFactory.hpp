@@ -28,6 +28,7 @@
 #include "storage/HashTableBase.hpp"
 #include "storage/HashTable.pb.h"
 #include "storage/LinearOpenAddressingHashTable.hpp"
+#include "storage/PackedPayloadAggregationStateHashTable.hpp"
 #include "storage/SeparateChainingHashTable.hpp"
 #include "storage/SimpleScalarSeparateChainingHashTable.hpp"
 #include "storage/TupleReference.hpp"
@@ -324,18 +325,38 @@ class HashTableFactory {
 };
 
 /**
- * @brief Convenient alias that provides a HashTableFactory whose only template
- *        parameter is the aggregate state type.
- **/
-template <typename ValueT>
-using AggregationStateHashTableFactory
-    = HashTableFactory<ValueT, true, false, true, false>;
-
-/**
  * @brief Convenient alias for a HashTableFactory that makes JoinHashTables.
  **/
 typedef HashTableFactory<TupleReference, true, false, false, true>
     JoinHashTableFactory;
+
+/**
+ * @brief TODO
+ */
+class AggregationStateHashTableFactory {
+ public:
+  static AggregationStateHashTableBase* CreateResizable(
+      const HashTableImplType hash_table_type,
+      const std::vector<const Type*> &key_types,
+      const std::size_t num_entries,
+      const std::vector<AggregationHandle *> &handles,
+      StorageManager *storage_manager) {
+    switch (hash_table_type) {
+      case HashTableImplType::kSeparateChaining:
+        return new PackedPayloadSeparateChainingAggregationStateHashTable(
+            key_types, num_entries, handles, storage_manager);
+      default: {
+        LOG(FATAL) << "Unrecognized HashTableImplType in HashTableFactory::createResizable()\n";
+      }
+    }
+  }
+
+ private:
+  // Class is all-static and should not be instantiated.
+  AggregationStateHashTableFactory();
+
+  DISALLOW_COPY_AND_ASSIGN(AggregationStateHashTableFactory);
+};
 
 /** @} */
 

@@ -33,6 +33,7 @@
 #include "storage/HashTableBase.hpp"
 #include "storage/HashTablePool.hpp"
 #include "storage/PartitionedHashTablePool.hpp"
+#include "storage/StorageBlock.hpp"
 #include "storage/StorageBlockInfo.hpp"
 #include "utility/Macros.hpp"
 
@@ -46,6 +47,7 @@ class CatalogRelationSchema;
 class InsertDestination;
 class LIPFilterAdaptiveProber;
 class StorageManager;
+class TupleIdSequence;
 
 DECLARE_int32(num_aggregation_partitions);
 DECLARE_int32(partition_aggregation_num_groups_threshold);
@@ -178,11 +180,6 @@ class AggregationOperationState {
   void finalizeAggregate(InsertDestination *output_destination);
 
   /**
-   * @brief Destroy the payloads in the aggregation hash tables.
-   **/
-  void destroyAggregationHashTablePayload();
-
-  /**
    * @brief Generate the final results for the aggregates managed by this
    *        AggregationOperationState and write them out to StorageBlock(s).
    *        In this implementation, each thread picks a hash table belonging to
@@ -236,27 +233,28 @@ class AggregationOperationState {
       const std::vector<bool> &is_distinct,
       const std::vector<std::unique_ptr<const Scalar>> &group_by,
       const std::vector<const AggregateFunction *> &aggregate_functions) const {
-    // If there's no aggregation, return false.
-    if (aggregate_functions.empty()) {
-      return false;
-    }
-    // Check if there's a distinct operation involved in any aggregate, if so
-    // the aggregate can't be partitioned.
-    for (auto distinct : is_distinct) {
-      if (distinct) {
-        return false;
-      }
-    }
-    // There's no distinct aggregation involved, Check if there's at least one
-    // GROUP BY operation.
-    if (group_by.empty()) {
-      return false;
-    }
-    // There are GROUP BYs without DISTINCT. Check if the estimated number of
-    // groups is large enough to warrant a partitioned aggregation.
-    return estimated_num_groups >
-           static_cast<std::size_t>(
-               FLAGS_partition_aggregation_num_groups_threshold);
+//    // If there's no aggregation, return false.
+//    if (aggregate_functions.empty()) {
+//      return false;
+//    }
+//    // Check if there's a distinct operation involved in any aggregate, if so
+//    // the aggregate can't be partitioned.
+//    for (auto distinct : is_distinct) {
+//      if (distinct) {
+//        return false;
+//      }
+//    }
+//    // There's no distinct aggregation involved, Check if there's at least one
+//    // GROUP BY operation.
+//    if (group_by.empty()) {
+//      return false;
+//    }
+//    // There are GROUP BYs without DISTINCT. Check if the estimated number of
+//    // groups is large enough to warrant a partitioned aggregation.
+//    return estimated_num_groups >
+//           static_cast<std::size_t>(
+//               FLAGS_partition_aggregation_num_groups_threshold);
+    return false;
   }
 
   // Common state for all aggregates in this operation: the input relation, the
@@ -267,26 +265,26 @@ class AggregationOperationState {
   const bool is_aggregate_partitioned_;
 
   std::unique_ptr<const Predicate> predicate_;
-  std::vector<std::unique_ptr<const Scalar>> group_by_list_;
 
   // Each individual aggregate in this operation has an AggregationHandle and
-  // some number of Scalar arguments.
+  // zero (indicated by -1) or one argument.
   std::vector<AggregationHandle *> handles_;
-  std::vector<std::vector<std::unique_ptr<const Scalar>>> arguments_;
 
   // For each aggregate, whether DISTINCT should be applied to the aggregate's
   // arguments.
   std::vector<bool> is_distinct_;
 
-  // Hash table for obtaining distinct (i.e. unique) arguments.
-  std::vector<std::unique_ptr<AggregationStateHashTableBase>>
-      distinctify_hashtables_;
+  // Non-trivial group-by/argument expressions that need to be evaluated.
+  std::vector<std::unique_ptr<const Scalar>> non_trivial_expressions_;
 
-#ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
-  // If all an aggregate's argument expressions are simply attributes in
-  // 'input_relation_', then this caches the attribute IDs of those arguments.
-  std::vector<std::vector<attribute_id>> arguments_as_attributes_;
-#endif
+  std::vector<attribute_id> group_by_key_ids_;
+  std::vector<std::vector<attribute_id>> argument_ids_;
+
+  std::vector<const Type *> group_by_types_;
+
+  // Hash table for obtaining distinct (i.e. unique) arguments.
+//  std::vector<std::unique_ptr<AggregationStateHashTableBase>>
+//      distinctify_hashtables_;
 
   // Per-aggregate global states for aggregation without GROUP BY.
   std::vector<std::unique_ptr<AggregationState>> single_states_;

@@ -23,10 +23,12 @@
 #include <cstddef>
 #include <vector>
 
-#include "ValueAccessor.hpp"
 #include "utility/Macros.hpp"
 
 namespace quickstep {
+
+class ColumnVectorsValueAccessor;
+class ValueAccessor;
 
 /** \addtogroup Storage
  *  @{
@@ -75,6 +77,23 @@ class HashTableBase {
   virtual ~HashTableBase() {}
 
   /**
+   * @brief Destroy the payload stored in the hash table.
+   **/
+  virtual void destroyPayload() {
+  }
+
+ protected:
+  HashTableBase() {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(HashTableBase);
+};
+
+class AggregationStateHashTableBase {
+ public:
+  virtual ~AggregationStateHashTableBase() {}
+
+  /**
    * TODO(harshad) We should get rid of this function from here. We are
    * postponing it because of the amount of work to be done is significant.
    * The steps are as follows:
@@ -91,28 +110,20 @@ class HashTableBase {
    * Optionally, we can also remove the AggregationStateHashTableBase
    * specialization from this file.
    **/
-  virtual bool upsertValueAccessorCompositeKeyFast(
-      const std::vector<attribute_id> &argument,
-      ValueAccessor *accessor,
+  virtual bool upsertValueAccessor(
+      const std::vector<std::vector<attribute_id>> &argument_ids,
       const std::vector<attribute_id> &key_attr_ids,
-      const bool check_for_null_keys) {
-    return false;
-  }
+      ValueAccessor *accessor,
+      ColumnVectorsValueAccessor *aux_accessor = nullptr) = 0;
 
-  /**
-   * @brief Destroy the payload stored in the hash table.
-   **/
-  virtual void destroyPayload() {
-  }
+  virtual void destroyPayload() = 0;
 
  protected:
-  HashTableBase() {}
+  AggregationStateHashTableBase() {}
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(HashTableBase);
+  DISALLOW_COPY_AND_ASSIGN(AggregationStateHashTableBase);
 };
-
-typedef HashTableBase<true, false, true, false> AggregationStateHashTableBase;
 
 /** @} */
 
