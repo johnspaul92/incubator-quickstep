@@ -30,6 +30,7 @@
 #include "query_optimizer/rules/PruneColumns.hpp"
 #include "query_optimizer/rules/StarSchemaHashJoinOrderOptimization.hpp"
 #include "query_optimizer/rules/SwapProbeBuild.hpp"
+#include "query_optimizer/rules/TransformFilterJoins.hpp"
 #include "query_optimizer/strategy/Aggregate.hpp"
 #include "query_optimizer/strategy/Join.hpp"
 #include "query_optimizer/strategy/OneToOne.hpp"
@@ -109,6 +110,7 @@ P::PhysicalPtr PhysicalGenerator::optimizePlan() {
   } else {
     rules.emplace_back(new SwapProbeBuild());
   }
+  rules.emplace_back(new TransformFilterJoins());
   if (FLAGS_use_lip_filters) {
     rules.emplace_back(new AttachLIPFilters());
   }
