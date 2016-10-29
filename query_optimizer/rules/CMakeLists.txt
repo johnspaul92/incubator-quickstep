@@ -32,6 +32,7 @@ add_library(quickstep_queryoptimizer_rules_StarSchemaHashJoinOrderOptimization
             StarSchemaHashJoinOrderOptimization.hpp)
 add_library(quickstep_queryoptimizer_rules_SwapProbeBuild SwapProbeBuild.cpp SwapProbeBuild.hpp)
 add_library(quickstep_queryoptimizer_rules_TopDownRule ../../empty_src.cpp TopDownRule.hpp)
+add_library(quickstep_queryoptimizer_rules_TransformFilterJoins TransformFilterJoins.cpp TransformFilterJoins.hpp)
 add_library(quickstep_queryoptimizer_rules_UpdateExpression UpdateExpression.cpp UpdateExpression.hpp)
 add_library(quickstep_queryoptimizer_rules_UnnestSubqueries UnnestSubqueries.cpp UnnestSubqueries.hpp)
 
@@ -160,6 +161,22 @@ target_link_libraries(quickstep_queryoptimizer_rules_SwapProbeBuild
 target_link_libraries(quickstep_queryoptimizer_rules_TopDownRule
                       quickstep_queryoptimizer_rules_Rule
                       quickstep_utility_Macros)
+target_link_libraries(quickstep_queryoptimizer_rules_TransformFilterJoins
+                      quickstep_queryoptimizer_costmodel_StarSchemaSimpleCostModel
+                      quickstep_queryoptimizer_expressions_AttributeReference
+                      quickstep_queryoptimizer_expressions_ExprId
+                      quickstep_queryoptimizer_physical_Aggregate
+                      quickstep_queryoptimizer_physical_HashJoin
+                      quickstep_queryoptimizer_physical_LIPFilterConfiguration
+                      quickstep_queryoptimizer_physical_PatternMatcher
+                      quickstep_queryoptimizer_physical_Physical
+                      quickstep_queryoptimizer_physical_PhysicalType
+                      quickstep_queryoptimizer_physical_Selection
+                      quickstep_queryoptimizer_physical_TopLevelPlan
+                      quickstep_queryoptimizer_rules_Rule
+                      quickstep_types_TypedValue
+                      quickstep_utility_Macros
+                      quickstep_utility_lipfilter_LIPFilter)
 target_link_libraries(quickstep_queryoptimizer_rules_UnnestSubqueries
                       quickstep_queryoptimizer_OptimizerContext
                       quickstep_queryoptimizer_expressions_AttributeReference
@@ -218,5 +235,6 @@ target_link_libraries(quickstep_queryoptimizer_rules
                       quickstep_queryoptimizer_rules_StarSchemaHashJoinOrderOptimization
                       quickstep_queryoptimizer_rules_SwapProbeBuild
                       quickstep_queryoptimizer_rules_TopDownRule
+                      quickstep_queryoptimizer_rules_TransformFilterJoins
                       quickstep_queryoptimizer_rules_UpdateExpression
                       quickstep_queryoptimizer_rules_UnnestSubqueries)

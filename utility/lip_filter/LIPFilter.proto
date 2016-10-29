@@ -22,8 +22,8 @@ package quickstep.serialization;
 import "types/Type.proto";
 
 enum LIPFilterType {
+  BIT_VECTOR_EXACT_FILTER = 2;
   BLOOM_FILTER = 1;
-  EXACT_FILTER = 2;
   SINGLE_IDENTITY_HASH_FILTER = 3;
 }
 
@@ -33,11 +33,19 @@ message LIPFilter {
   extensions 16 to max;
 }
 
-message SingleIdentityHashFilter {
+message BitVectorExactFilter {
   extend LIPFilter {
     // All required
     optional uint64 filter_cardinality = 16;
     optional uint64 attribute_size = 17;
+  }
+}
+
+message SingleIdentityHashFilter {
+  extend LIPFilter {
+    // All required
+    optional uint64 filter_cardinality = 24;
+    optional uint64 attribute_size = 25;
   }
 }
 
