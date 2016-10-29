@@ -38,7 +38,7 @@ enum class PhysicalType {
   kCreateTable,
   kDeleteTuples,
   kDropTable,
-  kFilterJoin,
+  kFilterInjection,
   kHashJoin,
   kInsertSelection,
   kInsertTuple,

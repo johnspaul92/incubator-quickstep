@@ -46,7 +46,7 @@
 #include "query_optimizer/physical/CreateTable.hpp"
 #include "query_optimizer/physical/DeleteTuples.hpp"
 #include "query_optimizer/physical/DropTable.hpp"
-#include "query_optimizer/physical/FilterJoin.hpp"
+#include "query_optimizer/physical/FilterInjection.hpp"
 #include "query_optimizer/physical/HashJoin.hpp"
 #include "query_optimizer/physical/InsertSelection.hpp"
 #include "query_optimizer/physical/InsertTuple.hpp"
@@ -247,6 +247,13 @@ class ExecutionGenerator {
    * @param physical_plan The SharedSubplanReference to be converted.
    */
   void convertSharedSubplanReference(const physical::SharedSubplanReferencePtr &physical_plan);
+
+  /**
+   * @brief Converts a FilterInjection to a BuildLIPFilter operator.
+   *
+   * @param physical_plan The FilterInjection to be converted.
+   */
+  void convertFilterInjection(const physical::FilterInjectionPtr &physical_plan);
 
   /**
    * @brief Converts a HashJoin to BuildHash, HashJoin and

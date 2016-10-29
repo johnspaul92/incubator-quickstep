@@ -29,6 +29,7 @@
 #include "query_optimizer/expressions/Predicate.hpp"
 #include "query_optimizer/physical/Aggregate.hpp"
 #include "query_optimizer/physical/NestedLoopsJoin.hpp"
+#include "query_optimizer/physical/FilterInjection.hpp"
 #include "query_optimizer/physical/HashJoin.hpp"
 #include "query_optimizer/physical/Physical.hpp"
 #include "query_optimizer/physical/Selection.hpp"
@@ -128,6 +129,9 @@ class StarSchemaSimpleCostModel : public CostModel {
  private:
   std::size_t estimateCardinalityForAggregate(
       const physical::AggregatePtr &physical_plan);
+
+  std::size_t estimateCardinalityForFilterInjection(
+      const physical::FilterInjectionPtr &physical_plan);
 
   std::size_t estimateCardinalityForHashJoin(
       const physical::HashJoinPtr &physical_plan);

@@ -17,8 +17,8 @@
  * under the License.
  **/
 
-#ifndef QUICKSTEP_QUERY_OPTIMIZER_PHYSICAL_FILTER_JOIN_HPP_
-#define QUICKSTEP_QUERY_OPTIMIZER_PHYSICAL_FILTER_JOIN_HPP_
+#ifndef QUICKSTEP_QUERY_OPTIMIZER_PHYSICAL_FILTER_INJECTION_HPP_
+#define QUICKSTEP_QUERY_OPTIMIZER_PHYSICAL_FILTER_INJECTION_HPP_
 
 #include <cstddef>
 #include <memory>
@@ -29,7 +29,6 @@
 #include "query_optimizer/OptimizerTree.hpp"
 #include "query_optimizer/expressions/AttributeReference.hpp"
 #include "query_optimizer/expressions/ExpressionUtil.hpp"
-#include "query_optimizer/expressions/NamedExpression.hpp"
 #include "query_optimizer/expressions/Predicate.hpp"
 #include "query_optimizer/physical/BinaryJoin.hpp"
 #include "query_optimizer/physical/Physical.hpp"
@@ -46,26 +45,38 @@ namespace physical {
  *  @{
  */
 
-class FilterJoin;
-typedef std::shared_ptr<const FilterJoin> FilterJoinPtr;
+class FilterInjection;
+typedef std::shared_ptr<const FilterInjection> FilterInjectionPtr;
 
 /**
- * @brief Physical filter join node.
+ * @brief Physical filter injection node.
  */
-class FilterJoin : public BinaryJoin {
+class FilterInjection : public BinaryJoin {
  public:
-  PhysicalType getPhysicalType() const override { return PhysicalType::kFilterJoin; }
+  PhysicalType getPhysicalType() const override { return PhysicalType::kFilterInjection; }
 
   std::string getName() const override {
-    return "FilterJoin";
+    if (is_anti_filter_) {
+      return "FilterInjection(Anti)";
+    } else {
+      return "FilterInjection";
+    }
   }
 
-  const std::vector<expressions::AttributeReferencePtr>& probe_join_attributes() const {
-    return probe_join_attributes_;
+  const std::vector<expressions::AttributeReferencePtr>& probe_attributes() const {
+    return probe_attributes_;
   }
 
-  const std::vector<expressions::AttributeReferencePtr>& build_join_attributes() const {
-    return build_join_attributes_;
+  const std::vector<expressions::AttributeReferencePtr>& build_attributes() const {
+    return build_attributes_;
+  }
+
+  const expressions::PredicatePtr& build_side_filter_predicate() const {
+    return build_side_filter_predicate_;
+  }
+
+  const bool is_anti_filter() const {
+    return is_anti_filter_;
   }
 
   PhysicalPtr copyWithNewChildren(
@@ -73,9 +84,11 @@ class FilterJoin : public BinaryJoin {
     DCHECK_EQ(children().size(), new_children.size());
     return Create(new_children[0],
                   new_children[1],
-                  probe_join_attributes_,
-                  build_join_attributes_,
-                  project_expressions());
+                  probe_attributes_,
+                  build_attributes_,
+                  project_expressions(),
+                  build_side_filter_predicate_,
+                  is_anti_filter_);
   }
 
   std::vector<expressions::AttributeReferencePtr> getReferencedAttributes() const override;
@@ -84,18 +97,22 @@ class FilterJoin : public BinaryJoin {
       const expressions::UnorderedNamedExpressionSet &referenced_expressions,
       PhysicalPtr *output) const override;
 
-  static FilterJoinPtr Create(
+  static FilterInjectionPtr Create(
       const PhysicalPtr &probe_child,
       const PhysicalPtr &build_child,
-      const std::vector<expressions::AttributeReferencePtr> &probe_join_attributes,
-      const std::vector<expressions::AttributeReferencePtr> &build_join_attributes,
-      const std::vector<expressions::NamedExpressionPtr> &project_expressions) {
-    return FilterJoinPtr(
-        new FilterJoin(probe_child,
-                       build_child,
-                       probe_join_attributes,
-                       build_join_attributes,
-                       project_expressions));
+      const std::vector<expressions::AttributeReferencePtr> &probe_attributes,
+      const std::vector<expressions::AttributeReferencePtr> &build_attributes,
+      const std::vector<expressions::NamedExpressionPtr> &project_expressions,
+      const expressions::PredicatePtr &build_side_filter_predicate,
+      const bool is_anti_filter) {
+    return FilterInjectionPtr(
+        new FilterInjection(probe_child,
+                            build_child,
+                            probe_attributes,
+                            build_attributes,
+                            project_expressions,
+                            build_side_filter_predicate,
+                            is_anti_filter));
   }
 
  protected:
@@ -108,21 +125,27 @@ class FilterJoin : public BinaryJoin {
       std::vector<std::vector<OptimizerTreeBaseNodePtr>> *container_child_fields) const override;
 
  private:
-  FilterJoin(
+  FilterInjection(
       const PhysicalPtr &probe_child,
       const PhysicalPtr &build_child,
-      const std::vector<expressions::AttributeReferencePtr> &probe_join_attributes,
-      const std::vector<expressions::AttributeReferencePtr> &build_join_attributes,
-      const std::vector<expressions::NamedExpressionPtr> &project_expressions)
+      const std::vector<expressions::AttributeReferencePtr> &probe_attributes,
+      const std::vector<expressions::AttributeReferencePtr> &build_attributes,
+      const std::vector<expressions::NamedExpressionPtr> &project_expressions,
+      const expressions::PredicatePtr &build_side_filter_predicate,
+      const bool is_anti_filter)
       : BinaryJoin(probe_child, build_child, project_expressions),
-        probe_join_attributes_(probe_join_attributes),
-        build_join_attributes_(build_join_attributes) {
+        probe_attributes_(probe_attributes),
+        build_attributes_(build_attributes),
+        build_side_filter_predicate_(build_side_filter_predicate),
+        is_anti_filter_(is_anti_filter) {
   }
 
-  std::vector<expressions::AttributeReferencePtr> probe_join_attributes_;
-  std::vector<expressions::AttributeReferencePtr> build_join_attributes_;
+  std::vector<expressions::AttributeReferencePtr> probe_attributes_;
+  std::vector<expressions::AttributeReferencePtr> build_attributes_;
+  expressions::PredicatePtr build_side_filter_predicate_;
+  bool is_anti_filter_;
 
-  DISALLOW_COPY_AND_ASSIGN(FilterJoin);
+  DISALLOW_COPY_AND_ASSIGN(FilterInjection);
 };
 
 /** @} */
@@ -131,4 +154,4 @@ class FilterJoin : public BinaryJoin {
 }  // namespace optimizer
 }  // namespace quickstep
 
-#endif /* QUICKSTEP_QUERY_OPTIMIZER_PHYSICAL_FILTER_JOIN_HPP_ */
+#endif  // QUICKSTEP_QUERY_OPTIMIZER_PHYSICAL_FILTER_INJECTION_HPP_

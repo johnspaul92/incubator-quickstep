@@ -17,7 +17,7 @@
  * under the License.
  **/
 
-#include "query_optimizer/physical/FilterJoin.hpp"
+#include "query_optimizer/physical/FilterInjection.hpp"
 
 #include <string>
 #include <vector>
@@ -26,7 +26,6 @@
 #include "query_optimizer/expressions/AttributeReference.hpp"
 #include "query_optimizer/expressions/ExpressionUtil.hpp"
 #include "query_optimizer/expressions/NamedExpression.hpp"
-#include "query_optimizer/expressions/Predicate.hpp"
 #include "utility/Cast.hpp"
 
 namespace quickstep {
@@ -35,26 +34,33 @@ namespace physical {
 
 namespace E = ::quickstep::optimizer::expressions;
 
-std::vector<E::AttributeReferencePtr> FilterJoin::getReferencedAttributes() const {
+std::vector<E::AttributeReferencePtr> FilterInjection::getReferencedAttributes() const {
   std::vector<E::AttributeReferencePtr> referenced_attributes;
   for (const auto &project_expression : project_expressions()) {
-    const std::vector<E::AttributeReferencePtr> referenced_attributes_in_expression =
+    const auto referenced_attributes_in_expression =
         project_expression->getReferencedAttributes();
     referenced_attributes.insert(referenced_attributes.end(),
                                  referenced_attributes_in_expression.begin(),
                                  referenced_attributes_in_expression.end());
   }
   referenced_attributes.insert(referenced_attributes.end(),
-                               probe_join_attributes_.begin(),
-                               probe_join_attributes_.end());
+                               probe_attributes_.begin(),
+                               probe_attributes_.end());
   referenced_attributes.insert(referenced_attributes.end(),
-                               build_join_attributes_.begin(),
-                               build_join_attributes_.end());
+                               build_attributes_.begin(),
+                               build_attributes_.end());
+  if (build_side_filter_predicate_ != nullptr) {
+    const auto referenced_attributes_in_predicate =
+        build_side_filter_predicate_->getReferencedAttributes();
+    referenced_attributes.insert(referenced_attributes.end(),
+                                 referenced_attributes_in_predicate.begin(),
+                                 referenced_attributes_in_predicate.end());
+  }
   return referenced_attributes;
 }
 
-bool FilterJoin::maybeCopyWithPrunedExpressions(
-    const E::UnorderedNamedExpressionSet &referenced_expressions,
+bool FilterInjection::maybeCopyWithPrunedExpressions(
+    const expressions::UnorderedNamedExpressionSet &referenced_expressions,
     PhysicalPtr *output) const {
   std::vector<E::NamedExpressionPtr> new_project_expressions;
   const auto &current_project_expressions = project_expressions();
@@ -66,15 +72,17 @@ bool FilterJoin::maybeCopyWithPrunedExpressions(
   if (new_project_expressions.size() != current_project_expressions.size()) {
     *output = Create(left(),
                      right(),
-                     probe_join_attributes_,
-                     build_join_attributes_,
-                     new_project_expressions);
+                     probe_attributes_,
+                     build_attributes_,
+                     new_project_expressions,
+                     build_side_filter_predicate_,
+                     is_anti_filter_);
     return true;
   }
   return false;
 }
 
-void FilterJoin::getFieldStringItems(
+void FilterInjection::getFieldStringItems(
     std::vector<std::string> *inline_field_names,
     std::vector<std::string> *inline_field_values,
     std::vector<std::string> *non_container_child_field_names,
@@ -87,10 +95,19 @@ void FilterJoin::getFieldStringItems(
                                   non_container_child_fields,
                                   container_child_field_names,
                                   container_child_fields);
-  container_child_field_names->push_back("probe_join_attributes");
-  container_child_fields->push_back(CastSharedPtrVector<OptimizerTreeBase>(probe_join_attributes_));
-  container_child_field_names->push_back("build_join_attributes");
-  container_child_fields->push_back(CastSharedPtrVector<OptimizerTreeBase>(build_join_attributes_));
+
+  inline_field_names->push_back("is_anti_filter");
+  inline_field_values->push_back(std::to_string(is_anti_filter_));
+
+  if (build_side_filter_predicate_ != nullptr) {
+    non_container_child_field_names->emplace_back("build_side_filter_predicate");
+    non_container_child_fields->emplace_back(build_side_filter_predicate_);
+  }
+
+  container_child_field_names->push_back("probe_attributes");
+  container_child_fields->push_back(CastSharedPtrVector<OptimizerTreeBase>(probe_attributes_));
+  container_child_field_names->push_back("build_attributes");
+  container_child_fields->push_back(CastSharedPtrVector<OptimizerTreeBase>(build_attributes_));
 }
 
 }  // namespace physical
