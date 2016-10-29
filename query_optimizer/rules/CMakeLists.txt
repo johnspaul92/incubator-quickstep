@@ -22,6 +22,7 @@ add_library(quickstep_queryoptimizer_rules_AttachLIPFilters AttachLIPFilters.cpp
 add_library(quickstep_queryoptimizer_rules_BottomUpRule ../../empty_src.cpp BottomUpRule.hpp)
 add_library(quickstep_queryoptimizer_rules_CollapseProject CollapseProject.cpp CollapseProject.hpp)
 add_library(quickstep_queryoptimizer_rules_GenerateJoins GenerateJoins.cpp GenerateJoins.hpp)
+add_library(quickstep_queryoptimizer_rules_InjectJoinFilters InjectJoinFilters.cpp InjectJoinFilters.hpp)
 add_library(quickstep_queryoptimizer_rules_PruneColumns PruneColumns.cpp PruneColumns.hpp)
 add_library(quickstep_queryoptimizer_rules_PushDownFilter PushDownFilter.cpp PushDownFilter.hpp)
 add_library(quickstep_queryoptimizer_rules_PushDownSemiAntiJoin PushDownSemiAntiJoin.cpp PushDownSemiAntiJoin.hpp)
@@ -32,7 +33,6 @@ add_library(quickstep_queryoptimizer_rules_StarSchemaHashJoinOrderOptimization
             StarSchemaHashJoinOrderOptimization.hpp)
 add_library(quickstep_queryoptimizer_rules_SwapProbeBuild SwapProbeBuild.cpp SwapProbeBuild.hpp)
 add_library(quickstep_queryoptimizer_rules_TopDownRule ../../empty_src.cpp TopDownRule.hpp)
-add_library(quickstep_queryoptimizer_rules_TransformFilterJoins TransformFilterJoins.cpp TransformFilterJoins.hpp)
 add_library(quickstep_queryoptimizer_rules_UpdateExpression UpdateExpression.cpp UpdateExpression.hpp)
 add_library(quickstep_queryoptimizer_rules_UnnestSubqueries UnnestSubqueries.cpp UnnestSubqueries.hpp)
 
@@ -161,11 +161,13 @@ target_link_libraries(quickstep_queryoptimizer_rules_SwapProbeBuild
 target_link_libraries(quickstep_queryoptimizer_rules_TopDownRule
                       quickstep_queryoptimizer_rules_Rule
                       quickstep_utility_Macros)
-target_link_libraries(quickstep_queryoptimizer_rules_TransformFilterJoins
+target_link_libraries(quickstep_queryoptimizer_rules_InjectJoinFilters
                       quickstep_queryoptimizer_costmodel_StarSchemaSimpleCostModel
                       quickstep_queryoptimizer_expressions_AttributeReference
                       quickstep_queryoptimizer_expressions_ExprId
+                      quickstep_queryoptimizer_expressions_ExpressionUtil
                       quickstep_queryoptimizer_physical_Aggregate
+                      quickstep_queryoptimizer_physical_FilterInjection
                       quickstep_queryoptimizer_physical_HashJoin
                       quickstep_queryoptimizer_physical_LIPFilterConfiguration
                       quickstep_queryoptimizer_physical_PatternMatcher
@@ -174,6 +176,8 @@ target_link_libraries(quickstep_queryoptimizer_rules_TransformFilterJoins
                       quickstep_queryoptimizer_physical_Selection
                       quickstep_queryoptimizer_physical_TopLevelPlan
                       quickstep_queryoptimizer_rules_Rule
+                      quickstep_queryoptimizer_rules_PruneColumns
+                      quickstep_types_TypeID
                       quickstep_types_TypedValue
                       quickstep_utility_Macros
                       quickstep_utility_lipfilter_LIPFilter)
@@ -227,6 +231,7 @@ target_link_libraries(quickstep_queryoptimizer_rules
                       quickstep_queryoptimizer_rules_BottomUpRule
                       quickstep_queryoptimizer_rules_CollapseProject
                       quickstep_queryoptimizer_rules_GenerateJoins
+                      quickstep_queryoptimizer_rules_InjectJoinFilters
                       quickstep_queryoptimizer_rules_PruneColumns
                       quickstep_queryoptimizer_rules_PushDownFilter
                       quickstep_queryoptimizer_rules_PushDownSemiAntiJoin
@@ -235,6 +240,5 @@ target_link_libraries(quickstep_queryoptimizer_rules
                       quickstep_queryoptimizer_rules_StarSchemaHashJoinOrderOptimization
                       quickstep_queryoptimizer_rules_SwapProbeBuild
                       quickstep_queryoptimizer_rules_TopDownRule
-                      quickstep_queryoptimizer_rules_TransformFilterJoins
                       quickstep_queryoptimizer_rules_UpdateExpression
                       quickstep_queryoptimizer_rules_UnnestSubqueries)

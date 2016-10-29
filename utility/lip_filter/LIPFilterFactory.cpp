@@ -37,16 +37,34 @@ LIPFilter* LIPFilterFactory::ReconstructFromProto(const serialization::LIPFilter
           proto.GetExtension(serialization::BitVectorExactFilter::attribute_size);
       const std::size_t filter_cardinality =
           proto.GetExtension(serialization::BitVectorExactFilter::filter_cardinality);
+      const bool is_anti_filter =
+          proto.GetExtension(serialization::BitVectorExactFilter::is_anti_filter);
 
       switch (attr_size) {
         case 1:
-          return new BitVectorExactFilter<std::uint8_t>(filter_cardinality);
+          if (is_anti_filter) {
+            return new BitVectorExactFilter<std::uint8_t, true>(filter_cardinality);
+          } else {
+            return new BitVectorExactFilter<std::uint8_t, false>(filter_cardinality);
+          }
         case 2:
-          return new BitVectorExactFilter<std::uint16_t>(filter_cardinality);
+          if (is_anti_filter) {
+            return new BitVectorExactFilter<std::uint16_t, true>(filter_cardinality);
+          } else {
+            return new BitVectorExactFilter<std::uint16_t, false>(filter_cardinality);
+          }
         case 4:
-          return new BitVectorExactFilter<std::uint32_t>(filter_cardinality);
+          if (is_anti_filter) {
+            return new BitVectorExactFilter<std::uint32_t, true>(filter_cardinality);
+          } else {
+            return new BitVectorExactFilter<std::uint32_t, false>(filter_cardinality);
+          }
         case 8:
-          return new BitVectorExactFilter<std::uint64_t>(filter_cardinality);
+          if (is_anti_filter) {
+            return new BitVectorExactFilter<std::uint64_t, true>(filter_cardinality);
+          } else {
+            return new BitVectorExactFilter<std::uint64_t, false>(filter_cardinality);
+          }
         default:
           LOG(FATAL) << "Invalid attribute size for BitVectorExactFilter: "
                      << attr_size;

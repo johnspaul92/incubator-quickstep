@@ -26,6 +26,7 @@
 #include "catalog/CatalogRelationStatistics.hpp"
 #include "query_optimizer/physical/Aggregate.hpp"
 #include "query_optimizer/physical/NestedLoopsJoin.hpp"
+#include "query_optimizer/physical/FilterInjection.hpp"
 #include "query_optimizer/physical/HashJoin.hpp"
 #include "query_optimizer/physical/Physical.hpp"
 #include "query_optimizer/physical/PhysicalType.hpp"
@@ -60,6 +61,9 @@ std::size_t SimpleCostModel::estimateCardinality(
     case P::PhysicalType::kTableGenerator:
       return estimateCardinalityForTableGenerator(
           std::static_pointer_cast<const P::TableGenerator>(physical_plan));
+    case P::PhysicalType::kFilterInjection:
+      return estimateCardinalityForFilterInjection(
+          std::static_pointer_cast<const P::FilterInjection>(physical_plan));
     case P::PhysicalType::kHashJoin:
       return estimateCardinalityForHashJoin(
           std::static_pointer_cast<const P::HashJoin>(physical_plan));
@@ -93,13 +97,12 @@ std::size_t SimpleCostModel::estimateCardinalityForTopLevelPlan(
 
 std::size_t SimpleCostModel::estimateCardinalityForTableReference(
     const P::TableReferencePtr &physical_plan) {
-  const std::size_t num_tuples_in_relation =
-      physical_plan->relation()->getStatistics().getNumTuples();
-  if (num_tuples_in_relation == 0) {
-    return physical_plan->relation()->estimateTupleCardinality();
-  } else {
-    return num_tuples_in_relation;
-  }
+  const CatalogRelation *relation = physical_plan->relation();
+  const CatalogRelationStatistics &stat = relation->getStatistics();
+  const std::size_t num_tuples =
+      stat.hasNumTuples() ? stat.getNumTuples()
+                          : relation->estimateTupleCardinality();
+  return num_tuples;
 }
 
 std::size_t SimpleCostModel::estimateCardinalityForSelection(
@@ -117,6 +120,11 @@ std::size_t SimpleCostModel::estimateCardinalityForSort(
 std::size_t SimpleCostModel::estimateCardinalityForTableGenerator(
     const P::TableGeneratorPtr &physical_plan) {
   return physical_plan->generator_function_handle()->getEstimatedCardinality();
+}
+
+std::size_t SimpleCostModel::estimateCardinalityForFilterInjection(
+    const P::FilterInjectionPtr &physical_plan) {
+  return estimateCardinality(physical_plan->left());
 }
 
 std::size_t SimpleCostModel::estimateCardinalityForHashJoin(

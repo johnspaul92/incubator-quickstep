@@ -43,7 +43,7 @@ namespace quickstep {
  *  @{
  */
 
-template <typename CppType>
+template <typename CppType, bool is_anti_filter>
 class BitVectorExactFilter : public LIPFilter {
  public:
   /**
@@ -158,7 +158,13 @@ class BitVectorExactFilter : public LIPFilter {
   inline bool contains(const void *key_begin) const {
     const CppType loc = *reinterpret_cast<const CppType *>(key_begin);
     DCHECK_LE(loc, filter_cardinality_);
-    return (bit_array_[loc >> 3u].load(std::memory_order_relaxed) & (1u << (loc & 7u)));
+    const bool is_bit_set =
+        (bit_array_[loc >> 3u].load(std::memory_order_relaxed) & (1u << (loc & 7u))) != 0;
+    if (is_anti_filter) {
+      return !is_bit_set;
+    } else {
+      return is_bit_set;
+    }
   }
 
   std::size_t filter_cardinality_;

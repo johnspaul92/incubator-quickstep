@@ -38,6 +38,7 @@
 #include "query_optimizer/expressions/PatternMatcher.hpp"
 #include "query_optimizer/physical/Aggregate.hpp"
 #include "query_optimizer/physical/NestedLoopsJoin.hpp"
+#include "query_optimizer/physical/FilterInjection.hpp"
 #include "query_optimizer/physical/HashJoin.hpp"
 #include "query_optimizer/physical/PatternMatcher.hpp"
 #include "query_optimizer/physical/Physical.hpp"
@@ -75,6 +76,9 @@ std::size_t StarSchemaSimpleCostModel::estimateCardinality(
     case P::PhysicalType::kTableGenerator:
       return estimateCardinalityForTableGenerator(
           std::static_pointer_cast<const P::TableGenerator>(physical_plan));
+    case P::PhysicalType::kFilterInjection:
+      return estimateCardinalityForFilterInjection(
+          std::static_pointer_cast<const P::FilterInjection>(physical_plan));
     case P::PhysicalType::kHashJoin:
       return estimateCardinalityForHashJoin(
           std::static_pointer_cast<const P::HashJoin>(physical_plan));
@@ -97,7 +101,8 @@ std::size_t StarSchemaSimpleCostModel::estimateCardinality(
       return estimateCardinalityForWindowAggregate(
           std::static_pointer_cast<const P::WindowAggregate>(physical_plan));
     default:
-      LOG(FATAL) << "Unsupported physical plan:" << physical_plan->toString();
+      return 1u;
+//      LOG(FATAL) << "Unsupported physical plan:" << physical_plan->toString();
   }
 }
 
@@ -134,6 +139,13 @@ std::size_t StarSchemaSimpleCostModel::estimateCardinalityForSort(
 std::size_t StarSchemaSimpleCostModel::estimateCardinalityForTableGenerator(
     const P::TableGeneratorPtr &physical_plan) {
   return physical_plan->generator_function_handle()->getEstimatedCardinality();
+}
+
+std::size_t StarSchemaSimpleCostModel::estimateCardinalityForFilterInjection(
+    const P::FilterInjectionPtr &physical_plan) {
+  std::size_t left_cardinality = estimateCardinality(physical_plan->left());
+  double right_selectivity = estimateSelectivity(physical_plan->right());
+  return static_cast<std::size_t>(left_cardinality * right_selectivity + 0.5);
 }
 
 std::size_t StarSchemaSimpleCostModel::estimateCardinalityForHashJoin(
@@ -218,6 +230,18 @@ std::size_t StarSchemaSimpleCostModel::estimateNumDistinctValues(
       }
       break;
     }
+    case P::PhysicalType::kFilterInjection: {
+      const P::FilterInjectionPtr &filter_injection =
+          std::static_pointer_cast<const P::FilterInjection>(physical_plan);
+      if (E::ContainsExprId(filter_injection->left()->getOutputAttributes(), attribute_id)) {
+        std::size_t left_child_num_distinct_values =
+            estimateNumDistinctValues(attribute_id, filter_injection->left());
+        double right_child_selectivity =
+            estimateSelectivity(filter_injection->right());
+        return static_cast<std::size_t>(
+            left_child_num_distinct_values * right_child_selectivity + 0.5);
+      }
+    }
     case P::PhysicalType::kHashJoin: {
       const P::HashJoinPtr &hash_join =
           std::static_pointer_cast<const P::HashJoin>(physical_plan);
@@ -255,6 +279,12 @@ double StarSchemaSimpleCostModel::estimateSelectivity(
           estimateSelectivityForPredicate(selection->filter_predicate(), selection);
       double child_selectivity = estimateSelectivity(selection->input());
       return filter_selectivity * child_selectivity;
+    }
+    case P::PhysicalType::kFilterInjection: {
+      const P::FilterInjectionPtr &filter_injection =
+          std::static_pointer_cast<const P::FilterInjection>(physical_plan);
+      return estimateSelectivity(filter_injection->left()) *
+                 estimateSelectivity(filter_injection->right());
     }
     case P::PhysicalType::kHashJoin: {
       const P::HashJoinPtr &hash_join =

@@ -17,13 +17,11 @@
  * under the License.
  **/
 
-#ifndef QUICKSTEP_QUERY_OPTIMIZER_RULES_TRANSFORM_FILTER_JOINS_HPP_
-#define QUICKSTEP_QUERY_OPTIMIZER_RULES_TRANSFORM_FILTER_JOINS_HPP_
+#ifndef QUICKSTEP_QUERY_OPTIMIZER_RULES_INJECT_JOIN_FILTERS_HPP_
+#define QUICKSTEP_QUERY_OPTIMIZER_RULES_INJECT_JOIN_FILTERS_HPP_
 
-#include <cstddef>
-#include <map>
+#include <cstdint>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -31,6 +29,8 @@
 #include "query_optimizer/expressions/AttributeReference.hpp"
 #include "query_optimizer/expressions/ExprId.hpp"
 #include "query_optimizer/physical/LIPFilterConfiguration.hpp"
+#include "query_optimizer/physical/FilterInjection.hpp"
+#include "query_optimizer/physical/HashJoin.hpp"
 #include "query_optimizer/physical/Physical.hpp"
 #include "query_optimizer/rules/Rule.hpp"
 #include "utility/Macros.hpp"
@@ -42,14 +42,14 @@ namespace optimizer {
  *  @{
  */
 
-class TransformFilterJoins : public Rule<physical::Physical> {
+class InjectJoinFilters : public Rule<physical::Physical> {
  public:
   /**
    * @brief Constructor.
    */
-  TransformFilterJoins() {}
+  InjectJoinFilters() {}
 
-  ~TransformFilterJoins() override {}
+  ~InjectJoinFilters() override {}
 
   std::string getName() const override {
     return "TransformFilterJoins";
@@ -58,11 +58,37 @@ class TransformFilterJoins : public Rule<physical::Physical> {
   physical::PhysicalPtr apply(const physical::PhysicalPtr &input) override;
 
  private:
-  physical::PhysicalPtr applyTransform(const physical::PhysicalPtr &input);
+  bool isTransformable(const physical::HashJoinPtr &hash_join) const;
+
+  physical::PhysicalPtr transformHashJoinToFilters(
+      const physical::PhysicalPtr &input) const;
+
+  physical::PhysicalPtr pushDownFilters(const physical::PhysicalPtr &input) const;
+
+  physical::PhysicalPtr addFilterAnchors(const physical::PhysicalPtr &input,
+                                         const bool ancestor_can_anchor_filter) const;
+
+  void concretizeAsLIPFilters(const physical::PhysicalPtr &input,
+                              const physical::PhysicalPtr &anchor_node) const;
+
+  physical::PhysicalPtr pushDownFiltersInternal(
+      const physical::PhysicalPtr &probe_child,
+      const physical::PhysicalPtr &build_child,
+      const physical::FilterInjectionPtr &filter_injection) const;
+
+  bool findMinMaxValuesForAttributeHelper(
+      const physical::PhysicalPtr &physical_plan,
+      const expressions::AttributeReferencePtr &attribute,
+      std::int64_t *min_cpp_value,
+      std::int64_t *max_cpp_value) const;
 
   std::unique_ptr<cost::StarSchemaSimpleCostModel> cost_model_;
+  std::unique_ptr<physical::LIPFilterConfiguration> lip_filter_configuration_;
 
-  DISALLOW_COPY_AND_ASSIGN(TransformFilterJoins);
+  // 1G bits = 128MB
+  static constexpr std::int64_t kMaxFilterSize = 1000000000;
+
+  DISALLOW_COPY_AND_ASSIGN(InjectJoinFilters);
 };
 
 /** @} */
@@ -70,4 +96,4 @@ class TransformFilterJoins : public Rule<physical::Physical> {
 }  // namespace optimizer
 }  // namespace quickstep
 
-#endif  // QUICKSTEP_QUERY_OPTIMIZER_RULES_TRANSFORM_FILTER_JOINS_HPP_
+#endif  // QUICKSTEP_QUERY_OPTIMIZER_RULES_INJECT_JOIN_FILTERS_HPP_
