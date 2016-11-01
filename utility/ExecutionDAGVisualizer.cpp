@@ -147,6 +147,9 @@ void ExecutionDAGVisualizer::bindProfilingStats(
   for (std::size_t node_index = 0; node_index < num_nodes_; ++node_index) {
     if (nodes_.find(node_index) != nodes_.end()) {
       const std::size_t relop_start_time = time_start[node_index];
+      if (relop_start_time == std::numeric_limits<std::size_t>::max()) {
+        continue;
+      }
       const std::size_t relop_end_time = time_end[node_index];
       const std::size_t relop_elapsed_time = time_elapsed[node_index];
       NodeInfo &node_info = nodes_[node_index];

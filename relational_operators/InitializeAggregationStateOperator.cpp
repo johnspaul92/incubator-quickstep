@@ -17,7 +17,9 @@
  * under the License.
  **/
 
-#include "relational_operators/FinalizeAggregationOperator.hpp"
+#include "relational_operators/InitializeAggregationStateOperator.hpp"
+
+#include <vector>
 
 #include "query_execution/QueryContext.hpp"
 #include "query_execution/WorkOrderProtosContainer.hpp"
@@ -25,64 +27,43 @@
 #include "relational_operators/WorkOrder.pb.h"
 #include "storage/AggregationOperationState.hpp"
 
-#include "glog/logging.h"
-
 #include "tmb/id_typedefs.h"
 
 namespace quickstep {
 
-bool FinalizeAggregationOperator::getAllWorkOrders(
+bool InitializeAggregationStateOperator::getAllWorkOrders(
     WorkOrdersContainer *container,
     QueryContext *query_context,
     StorageManager *storage_manager,
     const tmb::client_id scheduler_client_id,
     tmb::MessageBus *bus) {
-  DCHECK(query_context != nullptr);
-
-  if (blocking_dependencies_met_ && !started_) {
-    started_ = true;
+  if (!started_) {
     AggregationOperationState *agg_state =
         query_context->getAggregationState(aggr_state_index_);
     DCHECK(agg_state != nullptr);
+
     for (std::size_t partition_id = 0;
-         partition_id < agg_state->getNumPartitions();
+         partition_id < agg_state->getNumInitializePartitions();
          ++partition_id) {
       container->addNormalWorkOrder(
-          new FinalizeAggregationWorkOrder(
+          new InitializeAggregationStateWorkOrder(
               query_id_,
               partition_id,
-              agg_state,
-              query_context->getInsertDestination(output_destination_index_)),
+              agg_state),
           op_index_);
     }
-  }
-  return started_;
-}
-
-// TODO(quickstep-team) : Think about how the number of partitions could be
-// accessed in this function. Until then, we can't use partitioned aggregation
-// with the distributed version.
-bool FinalizeAggregationOperator::getAllWorkOrderProtos(WorkOrderProtosContainer *container) {
-  if (blocking_dependencies_met_ && !started_) {
     started_ = true;
-
-    serialization::WorkOrder *proto = new serialization::WorkOrder;
-    proto->set_work_order_type(serialization::FINALIZE_AGGREGATION);
-    proto->set_query_id(query_id_);
-    proto->SetExtension(serialization::FinalizeAggregationWorkOrder::aggr_state_index,
-                        aggr_state_index_);
-    proto->SetExtension(serialization::FinalizeAggregationWorkOrder::insert_destination_index,
-                        output_destination_index_);
-
-    container->addWorkOrderProto(proto, op_index_);
   }
   return started_;
 }
 
-void FinalizeAggregationWorkOrder::execute() {
-//  if (output_destination_ == nullptr) {
-    state_->finalizeAggregate(partition_id_, output_destination_);
-//  }
+bool InitializeAggregationStateOperator::getAllWorkOrderProtos(WorkOrderProtosContainer *container) {
+  // TODO
+  LOG(FATAL) << "Not implemented";
+}
+
+void InitializeAggregationStateWorkOrder::execute() {
+  state_->initializeState(partition_id_);
 }
 
 }  // namespace quickstep

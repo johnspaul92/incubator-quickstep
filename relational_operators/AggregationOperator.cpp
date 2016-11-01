@@ -102,7 +102,9 @@ serialization::WorkOrder* AggregationOperator::createWorkOrderProto(const block_
 }
 
 void AggregationWorkOrder::execute() {
-  state_->aggregateBlock(input_block_id_, lip_filter_adaptive_prober_.get());
+//  if (input_block_id_ == static_cast<block_id>(-1)) {
+    state_->aggregateBlock(input_block_id_, lip_filter_adaptive_prober_.get());
+//  }
 }
 
 }  // namespace quickstep

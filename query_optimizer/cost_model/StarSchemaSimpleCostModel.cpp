@@ -529,7 +529,6 @@ attribute_id StarSchemaSimpleCostModel::findCatalogRelationAttributeId(
   return kInvalidAttributeID;
 }
 
-
 }  // namespace cost
 }  // namespace optimizer
 }  // namespace quickstep

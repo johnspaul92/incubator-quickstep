@@ -83,7 +83,7 @@ class BitVectorExactFilter : public LIPFilter {
     DCHECK(batch != nullptr);
     DCHECK_LE(batch_size, batch->size());
 
-    return InvokeOnAnyValueAccessor(
+    return InvokeOnValueAccessorMaybeTupleIdSequenceAdapter(
         accessor,
         [&](auto *accessor) -> std::size_t {  // NOLINT(build/c++11)
       if (is_attr_nullable) {

@@ -168,7 +168,7 @@ ColumnVector* ScalarAttribute::getAllValuesForJoin(
   ValueAccessor *accessor = using_left_relation ? left_accessor
                                                 : right_accessor;
 
-  return InvokeOnAnyValueAccessor(
+  return InvokeOnValueAccessorMaybeTupleIdSequenceAdapter(
       accessor,
       [&joined_tuple_ids,
        &attr_id,

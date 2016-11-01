@@ -272,6 +272,16 @@ class TupleIdSequence {
   }
 
   /**
+   * @brief Get an iterator one before the given tuple ID.
+   * @warning The iterator returned must be incremented to become valid.
+   *
+   * @return An iterator one before the given tuple ID in this sequence.
+   **/
+  inline const_iterator before_position(const tuple_id position) const {
+    return const_iterator(&internal_bitvector_, position - 1);
+  }
+
+  /**
    * @brief Get an iterator one-past-the-end of tuple IDs actually in this
    *        sequence.
    *

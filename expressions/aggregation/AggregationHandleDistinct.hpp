@@ -26,6 +26,7 @@
 
 #include "catalog/CatalogTypedefs.hpp"
 #include "expressions/aggregation/AggregationConcreteHandle.hpp"
+#include "expressions/aggregation/AggregationID.hpp"
 #include "storage/HashTableBase.hpp"
 #include "types/TypedValue.hpp"
 #include "utility/Macros.hpp"
@@ -49,7 +50,17 @@ class AggregationHandleDistinct : public AggregationConcreteHandle {
   /**
    * @brief Constructor.
    **/
-  AggregationHandleDistinct() {}
+  AggregationHandleDistinct()
+      : AggregationConcreteHandle(AggregationID::kDistinct) {}
+
+  std::vector<const Type *> getArgumentTypes() const override {
+    return {};
+  }
+
+  const Type* getResultType() const override {
+    LOG(FATAL)
+        << "AggregationHandleDistinct does not support getResultType().";
+  }
 
   AggregationState* createInitialState() const override {
     LOG(FATAL)

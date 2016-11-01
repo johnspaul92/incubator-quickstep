@@ -40,6 +40,7 @@ class ValueAccessor;
  *        HashTableFactory to create a HashTable.
  **/
 enum class HashTableImplType {
+  kCollisionFreeColumnwise,
   kLinearOpenAddressing,
   kSeparateChaining,
   kSimpleScalarSeparateChaining

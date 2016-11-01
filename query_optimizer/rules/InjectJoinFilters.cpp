@@ -105,10 +105,10 @@ bool InjectJoinFilters::isTransformable(
   std::int64_t min_cpp_value;
   std::int64_t max_cpp_value;
   const bool has_min_max_stats =
-      findMinMaxValuesForAttributeHelper(hash_join->right(),
-                                         hash_join->right_join_attributes().front(),
-                                         &min_cpp_value,
-                                         &max_cpp_value);
+      cost_model_->findMinMaxStatsCppValue(hash_join->right(),
+                                           hash_join->right_join_attributes().front(),
+                                           &min_cpp_value,
+                                           &max_cpp_value);
   if (!has_min_max_stats) {
     return false;
   }
@@ -331,10 +331,10 @@ void InjectJoinFilters::concretizeAsLIPFilters(
       std::int64_t min_cpp_value;
       std::int64_t max_cpp_value;
       const bool has_min_max_stats =
-          findMinMaxValuesForAttributeHelper(filter_injection,
-                                             build_attr,
-                                             &min_cpp_value,
-                                             &max_cpp_value);
+          cost_model_->findMinMaxStatsCppValue(filter_injection,
+                                               build_attr,
+                                               &min_cpp_value,
+                                               &max_cpp_value);
       DCHECK(has_min_max_stats);
       DCHECK_GE(min_cpp_value, 0);
       DCHECK_GE(max_cpp_value, 0);
@@ -344,7 +344,7 @@ void InjectJoinFilters::concretizeAsLIPFilters(
       lip_filter_configuration_->addBuildInfo(
           build_attr,
           filter_injection,
-          static_cast<std::size_t>(max_cpp_value),
+          static_cast<std::size_t>(max_cpp_value) + 1,
           LIPFilterType::kBitVectorExactFilter,
           filter_injection->is_anti_filter());
       lip_filter_configuration_->addProbeInfo(
@@ -364,36 +364,6 @@ void InjectJoinFilters::concretizeAsLIPFilters(
     }
   }
 }
-
-bool InjectJoinFilters::findMinMaxValuesForAttributeHelper(
-    const physical::PhysicalPtr &physical_plan,
-    const expressions::AttributeReferencePtr &attribute,
-    std::int64_t *min_cpp_value,
-    std::int64_t *max_cpp_value) const {
-  const TypedValue min_value =
-      cost_model_->findMinValueStat(physical_plan, attribute);
-  const TypedValue max_value =
-      cost_model_->findMaxValueStat(physical_plan, attribute);
-  if (min_value.isNull() || max_value.isNull()) {
-    return false;
-  }
-
-  switch (attribute->getValueType().getTypeID()) {
-    case TypeID::kInt: {
-      *min_cpp_value = min_value.getLiteral<int>();
-      *max_cpp_value = max_value.getLiteral<int>();
-      return true;
-    }
-    case TypeID::kLong: {
-      *min_cpp_value = min_value.getLiteral<std::int64_t>();
-      *max_cpp_value = max_value.getLiteral<std::int64_t>();
-      return true;
-    }
-    default:
-      return false;
-  }
-}
-
 
 }  // namespace optimizer
 }  // namespace quickstep

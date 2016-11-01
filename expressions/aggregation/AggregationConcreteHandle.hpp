@@ -26,6 +26,7 @@
 
 #include "catalog/CatalogTypedefs.hpp"
 #include "expressions/aggregation/AggregationHandle.hpp"
+#include "expressions/aggregation/AggregationID.hpp"
 #include "storage/HashTableBase.hpp"
 #include "threading/SpinMutex.hpp"
 #include "types/TypedValue.hpp"
@@ -101,7 +102,8 @@ class AggregationConcreteHandle : public AggregationHandle {
   }
 
  protected:
-  AggregationConcreteHandle() {}
+  AggregationConcreteHandle(const AggregationID agg_id)
+      : AggregationHandle(agg_id) {}
 
   template <typename HandleT, typename HashTableT>
   ColumnVector* finalizeHashTableHelper(

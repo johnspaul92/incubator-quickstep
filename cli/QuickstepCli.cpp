@@ -75,6 +75,7 @@ typedef quickstep::LineReaderDumb LineReaderImpl;
 
 #include "storage/PreloaderThread.hpp"
 #include "threading/ThreadIDBasedMap.hpp"
+#include "utility/EventProfiler.hpp"
 #include "utility/ExecutionDAGVisualizer.hpp"
 #include "utility/Macros.hpp"
 #include "utility/PtrVector.hpp"
@@ -190,6 +191,8 @@ DEFINE_bool(visualize_execution_dag, false,
             "If true, visualize the execution plan DAG into a graph in DOT "
             "format (DOT is a plain text graph description language) which is "
             "then printed via stderr.");
+DEFINE_string(profile_output, "",
+              "Output file name for writing the profiled events.");
 
 }  // namespace quickstep
 
@@ -449,6 +452,7 @@ int main(int argc, char* argv[]) {
               new quickstep::ExecutionDAGVisualizer(*query_handle->getQueryPlanMutable()));
         }
 
+        quickstep::simple_profiler.clear();
         start = std::chrono::steady_clock::now();
         QueryExecutionUtil::ConstructAndSendAdmitRequestMessage(
             main_thread_client_id,
@@ -491,6 +495,11 @@ int main(int argc, char* argv[]) {
                 foreman.getWorkOrderProfilingResults(query_handle->query_id());
             dag_visualizer->bindProfilingStats(profiling_stats);
             std::cerr << "\n" << dag_visualizer->toDOT() << "\n";
+          }
+          if (!quickstep::FLAGS_profile_output.empty()) {
+            std::ofstream ofs(quickstep::FLAGS_profile_output, std::ios::out);
+            quickstep::simple_profiler.writeToStream(ofs);
+            ofs.close();
           }
         } catch (const std::exception &e) {
           fprintf(stderr, "QUERY EXECUTION ERROR: %s\n", e.what());

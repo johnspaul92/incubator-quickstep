@@ -44,6 +44,7 @@ namespace quickstep {
 class AggregateFunction;
 class CatalogDatabaseLite;
 class CatalogRelationSchema;
+class ColumnVectorsValueAccessor;
 class InsertDestination;
 class LIPFilterAdaptiveProber;
 class StorageManager;
@@ -174,101 +175,77 @@ class AggregationOperationState {
    * @brief Generate the final results for the aggregates managed by this
    *        AggregationOperationState and write them out to StorageBlock(s).
    *
+   * @param partition_id The partition id of this finalize operation.
    * @param output_destination An InsertDestination where the finalized output
    *        tuple(s) from this aggregate are to be written.
    **/
-  void finalizeAggregate(InsertDestination *output_destination);
-
-  /**
-   * @brief Generate the final results for the aggregates managed by this
-   *        AggregationOperationState and write them out to StorageBlock(s).
-   *        In this implementation, each thread picks a hash table belonging to
-   *        a partition and writes its values to StorageBlock(s). There is no
-   *        need to merge multiple hash tables in one, because there is no
-   *        overlap in the keys across two hash tables.
-   *
-   * @param partition_id The ID of the partition for which finalize is being
-   *        performed.
-   * @param output_destination An InsertDestination where the finalized output
-   *        tuple(s) from this aggregate are to be written.
-   **/
-  void finalizeAggregatePartitioned(
-      const std::size_t partition_id, InsertDestination *output_destination);
-
-  static void mergeGroupByHashTables(AggregationStateHashTableBase *src,
-                                     AggregationStateHashTableBase *dst);
-
-  bool isAggregatePartitioned() const {
-    return is_aggregate_partitioned_;
-  }
+  void finalizeAggregate(const std::size_t partition_id,
+                         InsertDestination *output_destination);
 
   /**
    * @brief Get the number of partitions to be used for the aggregation.
    *        For non-partitioned aggregations, we return 1.
    **/
-  std::size_t getNumPartitions() const {
-    return is_aggregate_partitioned_
-               ? partitioned_group_by_hashtable_pool_->getNumPartitions()
-               : 1;
-  }
+  std::size_t getNumPartitions() const;
 
-  int dflag;
+  std::size_t getNumInitializePartitions() const;
+
+  void initializeState(const std::size_t partition_id);
 
  private:
-  // Merge locally (per storage block) aggregated states with global aggregation
-  // states.
-  void mergeSingleState(
-      const std::vector<std::unique_ptr<AggregationState>> &local_state);
+  bool checkAggregatePartitioned(
+      const std::size_t estimated_num_groups,
+      const std::vector<bool> &is_distinct,
+      const std::vector<std::unique_ptr<const Scalar>> &group_by,
+      const std::vector<const AggregateFunction *> &aggregate_functions) const;
 
   // Aggregate on input block.
   void aggregateBlockSingleState(const block_id input_block);
   void aggregateBlockHashTable(const block_id input_block,
                                LIPFilterAdaptiveProber *lip_filter_adaptive_prober);
 
-  void finalizeSingleState(InsertDestination *output_destination);
-  void finalizeHashTable(InsertDestination *output_destination);
+  // Merge locally (per storage block) aggregated states with global aggregation
+  // states.
+  void mergeSingleState(
+      const std::vector<std::unique_ptr<AggregationState>> &local_state);
+  void mergeGroupByHashTables(AggregationStateHashTableBase *src,
+                              AggregationStateHashTableBase *dst) const;
 
-  bool checkAggregatePartitioned(
-      const std::size_t estimated_num_groups,
-      const std::vector<bool> &is_distinct,
-      const std::vector<std::unique_ptr<const Scalar>> &group_by,
-      const std::vector<const AggregateFunction *> &aggregate_functions) const {
-//    // If there's no aggregation, return false.
-//    if (aggregate_functions.empty()) {
-//      return false;
-//    }
-//    // Check if there's a distinct operation involved in any aggregate, if so
-//    // the aggregate can't be partitioned.
-//    for (auto distinct : is_distinct) {
-//      if (distinct) {
-//        return false;
-//      }
-//    }
-//    // There's no distinct aggregation involved, Check if there's at least one
-//    // GROUP BY operation.
-//    if (group_by.empty()) {
-//      return false;
-//    }
-//    // There are GROUP BYs without DISTINCT. Check if the estimated number of
-//    // groups is large enough to warrant a partitioned aggregation.
-//    return estimated_num_groups >
-//           static_cast<std::size_t>(
-//               FLAGS_partition_aggregation_num_groups_threshold);
-    return false;
-  }
+  // Finalize the aggregation results into output_destination.
+  void finalizeSingleState(InsertDestination *output_destination);
+  void finalizeHashTable(const std::size_t partition_id,
+                         InsertDestination *output_destination);
+
+  // Specialized implementations for aggregateBlockHashTable.
+  void aggregateBlockHashTableImplCollisionFree(ValueAccessor *accessor,
+                                                ColumnVectorsValueAccessor *aux_accessor);
+  void aggregateBlockHashTableImplPartitioned(ValueAccessor *accessor,
+                                              ColumnVectorsValueAccessor *aux_accessor);
+  void aggregateBlockHashTableImplThreadPrivate(ValueAccessor *accessor,
+                                                ColumnVectorsValueAccessor *aux_accessor);
+
+  // Specialized implementations for finalizeHashTable.
+  void finalizeHashTableImplCollisionFree(const std::size_t partition_id,
+                                          InsertDestination *output_destination);
+  void finalizeHashTableImplPartitioned(const std::size_t partition_id,
+                                        InsertDestination *output_destination);
+  void finalizeHashTableImplThreadPrivate(InsertDestination *output_destination);
 
   // Common state for all aggregates in this operation: the input relation, the
   // filter predicate (if any), and the list of GROUP BY expressions (if any).
   const CatalogRelationSchema &input_relation_;
 
+  // Whether the aggregation is collision free or not.
+  bool is_aggregate_collision_free_;
+
   // Whether the aggregation is partitioned or not.
-  const bool is_aggregate_partitioned_;
+  bool is_aggregate_partitioned_;
 
   std::unique_ptr<const Predicate> predicate_;
 
   // Each individual aggregate in this operation has an AggregationHandle and
   // zero (indicated by -1) or one argument.
-  std::vector<AggregationHandle *> handles_;
+  std::vector<std::unique_ptr<AggregationHandle>> handles_;
 
   // For each aggregate, whether DISTINCT should be applied to the aggregate's
   // arguments.
@@ -300,6 +277,8 @@ class AggregationOperationState {
   std::unique_ptr<HashTablePool> group_by_hashtable_pool_;
 
   std::unique_ptr<PartitionedHashTablePool> partitioned_group_by_hashtable_pool_;
+
+  std::unique_ptr<AggregationStateHashTableBase> collision_free_hashtable_;
 
   StorageManager *storage_manager_;
 

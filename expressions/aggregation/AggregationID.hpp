@@ -32,9 +32,11 @@ namespace quickstep {
 enum class AggregationID {
   kAvg = 0,
   kCount,
+  kDistinct,
   kMax,
   kMin,
-  kSum
+  kSum,
+  kUnknown
 };
 
 /** @} */

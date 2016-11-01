@@ -47,6 +47,7 @@
 #include "expressions/Expressions.pb.h"
 #include "expressions/aggregation/AggregateFunction.hpp"
 #include "expressions/aggregation/AggregateFunction.pb.h"
+#include "expressions/aggregation/AggregationID.hpp"
 #include "expressions/predicate/Predicate.hpp"
 #include "expressions/scalar/Scalar.hpp"
 #include "expressions/scalar/ScalarAttribute.hpp"
@@ -103,6 +104,7 @@
 #include "relational_operators/DropTableOperator.hpp"
 #include "relational_operators/FinalizeAggregationOperator.hpp"
 #include "relational_operators/HashJoinOperator.hpp"
+#include "relational_operators/InitializeAggregationStateOperator.hpp"
 #include "relational_operators/InsertOperator.hpp"
 #include "relational_operators/NestedLoopsJoinOperator.hpp"
 #include "relational_operators/RelationalOperator.hpp"
@@ -124,6 +126,7 @@
 #include "storage/SubBlockTypeRegistry.hpp"
 #include "types/Type.hpp"
 #include "types/Type.pb.h"
+#include "types/TypeID.hpp"
 #include "types/TypedValue.hpp"
 #include "types/TypedValue.pb.h"
 #include "types/containers/Tuple.pb.h"
@@ -1386,6 +1389,8 @@ void ExecutionGenerator::convertAggregate(
       findRelationInfoOutputByPhysical(physical_plan->input());
   aggr_state_proto->set_relation_id(input_relation_info->relation->getID());
 
+  bool use_parallel_initialization = false;
+
   std::vector<const Type*> group_by_types;
   for (const E::NamedExpressionPtr &grouping_expression : physical_plan->grouping_expressions()) {
     unique_ptr<const Scalar> execution_group_by_expression;
@@ -1406,9 +1411,33 @@ void ExecutionGenerator::convertAggregate(
   }
 
   if (!group_by_types.empty()) {
-    // Right now, only SeparateChaining is supported.
-    aggr_state_proto->set_hash_table_impl_type(
-        serialization::HashTableImplType::SEPARATE_CHAINING);
+    const std::size_t estimated_num_groups =
+        cost_model_for_aggregation_->estimateNumGroupsForAggregate(physical_plan);
+    std::size_t exact_num_groups;
+    const bool can_use_collision_free_aggregation =
+        canUseCollisionFreeAggregation(physical_plan,
+                                       estimated_num_groups,
+                                       &exact_num_groups);
+
+    if (can_use_collision_free_aggregation) {
+      aggr_state_proto->set_hash_table_impl_type(
+          serialization::HashTableImplType::COLLISION_FREE_COLUMNWISE);
+      std::cout << "Use collision free aggregation!\n"
+                << "Size = " << exact_num_groups << "\n";
+
+      aggr_state_proto->set_estimated_num_entries(exact_num_groups);
+      use_parallel_initialization = true;
+    } else {
+      // Otherwise, use SeparateChaining.
+      aggr_state_proto->set_hash_table_impl_type(
+          serialization::HashTableImplType::SEPARATE_CHAINING);
+      std::cout << "Use normal aggregation\n"
+                << "Size = " << estimated_num_groups << "\n";
+
+      aggr_state_proto->set_estimated_num_entries(std::max(16uL, estimated_num_groups));
+    }
+  } else {
+    aggr_state_proto->set_estimated_num_entries(1uL);
   }
 
   for (const E::AliasPtr &named_aggregate_expression : physical_plan->aggregate_expressions()) {
@@ -1446,10 +1475,6 @@ void ExecutionGenerator::convertAggregate(
     aggr_state_proto->mutable_predicate()->CopyFrom(predicate->getProto());
   }
 
-  const std::size_t estimated_num_groups =
-      cost_model_for_aggregation_->estimateNumGroupsForAggregate(physical_plan);
-  aggr_state_proto->set_estimated_num_entries(std::max(16uL, estimated_num_groups));
-
   const QueryPlan::DAGNodeIndex aggregation_operator_index =
       execution_plan_->addRelationalOperator(
           new AggregationOperator(
@@ -1463,6 +1488,19 @@ void ExecutionGenerator::convertAggregate(
                                          input_relation_info->producer_operator_index,
                                          false /* is_pipeline_breaker */);
   }
+
+  if (use_parallel_initialization) {
+    const QueryPlan::DAGNodeIndex initialize_aggregation_state_operator_index =
+        execution_plan_->addRelationalOperator(
+            new InitializeAggregationStateOperator(
+                query_handle_->query_id(),
+                aggr_state_index));
+
+    execution_plan_->addDirectDependency(aggregation_operator_index,
+                                         initialize_aggregation_state_operator_index,
+                                         true);
+  }
+
 
   // Create InsertDestination proto.
   const CatalogRelation *output_relation = nullptr;
@@ -1506,6 +1544,78 @@ void ExecutionGenerator::convertAggregate(
     lip_filter_generator_->addAggregateInfo(physical_plan,
                                             aggregation_operator_index);
   }
+}
+
+bool ExecutionGenerator::canUseCollisionFreeAggregation(
+    const physical::AggregatePtr &physical_plan,
+    const std::size_t estimated_num_groups,
+    std::size_t *exact_num_groups) {
+  if (physical_plan->grouping_expressions().size() != 1) {
+    return false;
+  }
+
+  E::AttributeReferencePtr group_by_key_attr;
+  E::ExpressionPtr agg_expr = physical_plan->grouping_expressions().front();
+  if (!E::SomeAttributeReference::MatchesWithConditionalCast(agg_expr, &group_by_key_attr)) {
+    return false;
+  }
+
+  const TypeID key_type_id = group_by_key_attr->getValueType().getTypeID();
+  if (key_type_id != TypeID::kInt && key_type_id != TypeID::kLong) {
+    return false;
+  }
+
+  for (const auto &agg_expr : physical_plan->aggregate_expressions()) {
+    const E::AggregateFunctionPtr agg_func =
+        std::static_pointer_cast<const E::AggregateFunction>(agg_expr->expression());
+    switch (agg_func->getAggregate().getAggregationID()) {
+//      case AggregationID::kAvg:  // Fall through
+      case AggregationID::kCount:
+      case AggregationID::kSum:
+        break;
+      default:
+        return false;
+    }
+
+    const auto &arguments = agg_func->getArguments();
+    if (arguments.size() > 1) {
+      return false;
+    }
+
+    if (arguments.size() == 1) {
+      switch (arguments.front()->getValueType().getTypeID()) {
+        case TypeID::kInt:  // Fall through
+        case TypeID::kLong:
+        case TypeID::kFloat:
+        case TypeID::kDouble:
+          break;
+        default:
+          return false;
+      }
+    }
+  }
+
+  std::int64_t min_cpp_value;
+  std::int64_t max_cpp_value;
+  const bool has_min_max_stats =
+      cost_model_for_aggregation_->findMinMaxStatsCppValue(
+          physical_plan->input(),
+          group_by_key_attr,
+          &min_cpp_value,
+          &max_cpp_value);
+
+  if (!has_min_max_stats) {
+    return false;
+  }
+
+  if (min_cpp_value < 0 ||
+      max_cpp_value > 1000000000 ||
+      max_cpp_value / static_cast<double>(estimated_num_groups) > 256.0) {
+    return false;
+  }
+
+  *exact_num_groups = static_cast<std::size_t>(max_cpp_value) + 1;
+  return true;
 }
 
 void ExecutionGenerator::convertSort(const P::SortPtr &physical_sort) {

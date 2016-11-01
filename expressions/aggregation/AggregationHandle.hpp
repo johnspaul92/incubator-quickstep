@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "catalog/CatalogTypedefs.hpp"
+#include "expressions/aggregation/AggregationID.hpp"
 #include "storage/HashTableBase.hpp"
 #include "types/TypedValue.hpp"
 #include "utility/Macros.hpp"
@@ -108,6 +109,14 @@ class AggregationHandle {
    *
    **/
   virtual ~AggregationHandle() {}
+
+  AggregationID getAggregationID() const {
+    return agg_id_;
+  }
+
+  virtual std::vector<const Type *> getArgumentTypes() const = 0;
+
+  virtual const Type* getResultType() const = 0;
 
   /**
    * @brief Create an initial "blank" state for this aggregation.
@@ -258,7 +267,10 @@ class AggregationHandle {
   virtual void destroyPayload(std::uint8_t *byte_ptr) const {}
 
  protected:
-  AggregationHandle() {}
+  AggregationHandle(const AggregationID agg_id)
+      : agg_id_(agg_id) {}
+
+  const AggregationID agg_id_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(AggregationHandle);

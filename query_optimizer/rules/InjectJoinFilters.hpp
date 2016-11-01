@@ -76,12 +76,6 @@ class InjectJoinFilters : public Rule<physical::Physical> {
       const physical::PhysicalPtr &build_child,
       const physical::FilterInjectionPtr &filter_injection) const;
 
-  bool findMinMaxValuesForAttributeHelper(
-      const physical::PhysicalPtr &physical_plan,
-      const expressions::AttributeReferencePtr &attribute,
-      std::int64_t *min_cpp_value,
-      std::int64_t *max_cpp_value) const;
-
   std::unique_ptr<cost::StarSchemaSimpleCostModel> cost_model_;
   std::unique_ptr<physical::LIPFilterConfiguration> lip_filter_configuration_;
 

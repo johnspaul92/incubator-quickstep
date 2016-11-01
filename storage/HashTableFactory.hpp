@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include "storage/CollisionFreeAggregationStateHashTable.hpp"
 #include "storage/HashTable.hpp"
 #include "storage/HashTableBase.hpp"
 #include "storage/HashTable.pb.h"
@@ -114,6 +115,8 @@ serialization::HashTableImplType SimplifyHashTableImplTypeProto(
 inline HashTableImplType HashTableImplTypeFromProto(
     const serialization::HashTableImplType proto_type) {
   switch (proto_type) {
+    case serialization::HashTableImplType::COLLISION_FREE_COLUMNWISE:
+      return HashTableImplType::kCollisionFreeColumnwise;
     case serialization::HashTableImplType::LINEAR_OPEN_ADDRESSING:
       return HashTableImplType::kLinearOpenAddressing;
     case serialization::HashTableImplType::SEPARATE_CHAINING:
@@ -344,6 +347,9 @@ class AggregationStateHashTableFactory {
     switch (hash_table_type) {
       case HashTableImplType::kSeparateChaining:
         return new PackedPayloadSeparateChainingAggregationStateHashTable(
+            key_types, num_entries, handles, storage_manager);
+      case HashTableImplType::kCollisionFreeColumnwise:
+        return new CollisionFreeAggregationStateHashTable(
             key_types, num_entries, handles, storage_manager);
       default: {
         LOG(FATAL) << "Unrecognized HashTableImplType in HashTableFactory::createResizable()\n";
