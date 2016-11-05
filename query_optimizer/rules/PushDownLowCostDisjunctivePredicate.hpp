@@ -23,13 +23,13 @@
 #include <cstddef>
 #include <map>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
 #include "query_optimizer/cost_model/StarSchemaSimpleCostModel.hpp"
 #include "query_optimizer/expressions/AttributeReference.hpp"
 #include "query_optimizer/expressions/ExprId.hpp"
+#include "query_optimizer/expressions/Predicate.hpp"
 #include "query_optimizer/physical/Physical.hpp"
 #include "query_optimizer/rules/Rule.hpp"
 #include "utility/Macros.hpp"
@@ -57,6 +57,29 @@ class PushDownLowCostDisjunctivePredicate : public Rule<physical::Physical> {
   physical::PhysicalPtr apply(const physical::PhysicalPtr &input) override;
 
  private:
+  struct PredicateInfo {
+    PredicateInfo() {}
+    inline void add(expressions::PredicatePtr predicate) {
+      predicates.emplace_back(predicate);
+    }
+    std::vector<expressions::PredicatePtr> predicates;
+  };
+
+  void collectApplicablePredicates(const physical::PhysicalPtr &input);
+  physical::PhysicalPtr attachPredicates(const physical::PhysicalPtr &input) const;
+
+  static expressions::PredicatePtr CreateConjunctive(
+      const std::vector<expressions::PredicatePtr> predicates);
+
+  static expressions::PredicatePtr CreateDisjunctive(
+      const std::vector<expressions::PredicatePtr> predicates);
+
+  std::unique_ptr<cost::StarSchemaSimpleCostModel> cost_model_;
+
+  std::map<physical::PhysicalPtr,
+           std::vector<expressions::AttributeReferencePtr>> applicable_nodes_;
+  std::map<physical::PhysicalPtr, PredicateInfo> applicable_predicates_;
+
   DISALLOW_COPY_AND_ASSIGN(PushDownLowCostDisjunctivePredicate);
 };
 

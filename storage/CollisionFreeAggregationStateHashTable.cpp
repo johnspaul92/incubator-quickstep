@@ -132,17 +132,11 @@ bool CollisionFreeAggregationStateHashTable::upsertValueAccessor(
   const attribute_id key_attr_id = key_attr_ids.front();
   const bool is_key_nullable = key_type_->isNullable();
 
-  // TODO: aux_accessor
-  CHECK_GE(key_attr_id, 0);
-
   for (std::size_t i = 0; i < num_handles_; ++i) {
     DCHECK_LE(argument_ids[i].size(), 1u);
 
     const attribute_id argument_id =
         argument_ids[i].empty() ? kInvalidAttributeID : argument_ids[i].front();
-
-    // TODO: aux_accessor
-    CHECK_GE(argument_id, 0u);
 
     const AggregationHandle *handle = handles_[i];
     const auto &argument_types = handle->getArgumentTypes();
@@ -157,19 +151,58 @@ bool CollisionFreeAggregationStateHashTable::upsertValueAccessor(
       is_argument_nullable = argument_type->isNullable();
     }
 
-    // TODO: aux_accessor
     InvokeOnValueAccessorMaybeTupleIdSequenceAdapter(
         base_accessor,
         [&](auto *accessor) -> void {  // NOLINT(build/c++11)
-      upsertValueAccessorDispatchHelper(is_key_nullable,
-                                        is_argument_nullable,
-                                        key_type_,
-                                        argument_type,
-                                        handle->getAggregationID(),
-                                        key_attr_id,
-                                        argument_id,
-                                        vec_tables_[i],
-                                        accessor);
+      if (key_attr_id >= 0) {
+        if (argument_id >= 0) {
+          upsertValueAccessorDispatchHelper<false>(is_key_nullable,
+                                                   is_argument_nullable,
+                                                   key_type_,
+                                                   argument_type,
+                                                   handle->getAggregationID(),
+                                                   key_attr_id,
+                                                   argument_id,
+                                                   vec_tables_[i],
+                                                   accessor,
+                                                   accessor);
+        } else {
+          upsertValueAccessorDispatchHelper<true>(is_key_nullable,
+                                                  is_argument_nullable,
+                                                  key_type_,
+                                                  argument_type,
+                                                  handle->getAggregationID(),
+                                                  key_attr_id,
+                                                  -(argument_id+2),
+                                                  vec_tables_[i],
+                                                  accessor,
+                                                  aux_accessor);
+        }
+      } else {
+        if (argument_id >= 0) {
+          upsertValueAccessorDispatchHelper<true>(is_key_nullable,
+                                                  is_argument_nullable,
+                                                  key_type_,
+                                                  argument_type,
+                                                  handle->getAggregationID(),
+                                                  -(key_attr_id+2),
+                                                  argument_id,
+                                                  vec_tables_[i],
+                                                  aux_accessor,
+                                                  accessor);
+        } else {
+          upsertValueAccessorDispatchHelper<false>(is_key_nullable,
+                                                   is_argument_nullable,
+                                                   key_type_,
+                                                   argument_type,
+                                                   handle->getAggregationID(),
+                                                   -(key_attr_id+2),
+                                                   -(argument_id+2),
+                                                   vec_tables_[i],
+                                                   aux_accessor,
+                                                   aux_accessor);
+        }
+      }
     });
   }
   return true;

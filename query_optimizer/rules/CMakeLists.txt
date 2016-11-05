@@ -118,13 +118,18 @@ target_link_libraries(quickstep_queryoptimizer_rules_PushDownLowCostDisjunctiveP
                       quickstep_queryoptimizer_costmodel_StarSchemaSimpleCostModel
                       quickstep_queryoptimizer_expressions_AttributeReference
                       quickstep_queryoptimizer_expressions_ExprId
-                      quickstep_queryoptimizer_physical_Aggregate
+                      quickstep_queryoptimizer_expressions_ExpressionUtil
+                      quickstep_queryoptimizer_expressions_LogicalAnd
+                      quickstep_queryoptimizer_expressions_LogicalOr
+                      quickstep_queryoptimizer_expressions_PatternMatcher
+                      quickstep_queryoptimizer_expressions_Predicate
                       quickstep_queryoptimizer_physical_HashJoin
+                      quickstep_queryoptimizer_physical_NestedLoopsJoin
                       quickstep_queryoptimizer_physical_PatternMatcher
                       quickstep_queryoptimizer_physical_Physical
                       quickstep_queryoptimizer_physical_PhysicalType
                       quickstep_queryoptimizer_physical_Selection
-                      quickstep_queryoptimizer_physical_TopLevelPlan
+                      quickstep_queryoptimizer_physical_TableReference
                       quickstep_queryoptimizer_rules_Rule
                       quickstep_utility_Macros)
 target_link_libraries(quickstep_queryoptimizer_rules_PushDownSemiAntiJoin
@@ -199,6 +204,7 @@ target_link_libraries(quickstep_queryoptimizer_rules_InjectJoinFilters
                       quickstep_utility_lipfilter_LIPFilter)
 target_link_libraries(quickstep_queryoptimizer_rules_UnnestSubqueries
                       quickstep_queryoptimizer_OptimizerContext
+                      quickstep_queryoptimizer_expressions_Alias
                       quickstep_queryoptimizer_expressions_AttributeReference
                       quickstep_queryoptimizer_expressions_ComparisonExpression
                       quickstep_queryoptimizer_expressions_Exists
@@ -250,6 +256,7 @@ target_link_libraries(quickstep_queryoptimizer_rules
                       quickstep_queryoptimizer_rules_InjectJoinFilters
                       quickstep_queryoptimizer_rules_PruneColumns
                       quickstep_queryoptimizer_rules_PushDownFilter
+                      quickstep_queryoptimizer_rules_PushDownLowCostDisjunctivePredicate
                       quickstep_queryoptimizer_rules_PushDownSemiAntiJoin
                       quickstep_queryoptimizer_rules_Rule
                       quickstep_queryoptimizer_rules_RuleHelper
