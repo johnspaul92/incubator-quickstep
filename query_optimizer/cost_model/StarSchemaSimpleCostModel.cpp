@@ -143,9 +143,13 @@ std::size_t StarSchemaSimpleCostModel::estimateCardinalityForTableGenerator(
 
 std::size_t StarSchemaSimpleCostModel::estimateCardinalityForFilterInjection(
     const P::FilterInjectionPtr &physical_plan) {
+  double build_side_filter_selectivity =
+      estimateSelectivityForPredicate(physical_plan->build_side_filter_predicate(),
+                                      physical_plan->right());
   std::size_t left_cardinality = estimateCardinality(physical_plan->left());
   double right_selectivity = estimateSelectivity(physical_plan->right());
-  return static_cast<std::size_t>(left_cardinality * right_selectivity + 0.5);
+  return static_cast<std::size_t>(
+      left_cardinality * build_side_filter_selectivity * right_selectivity + 0.5);
 }
 
 std::size_t StarSchemaSimpleCostModel::estimateCardinalityForHashJoin(
@@ -283,8 +287,12 @@ double StarSchemaSimpleCostModel::estimateSelectivity(
     case P::PhysicalType::kFilterInjection: {
       const P::FilterInjectionPtr &filter_injection =
           std::static_pointer_cast<const P::FilterInjection>(physical_plan);
-      return estimateSelectivity(filter_injection->left()) *
-                 estimateSelectivity(filter_injection->right());
+      double left_selectivity = estimateSelectivity(filter_injection->left());
+      double right_selectivity = estimateSelectivity(filter_injection->right());
+      double build_side_filter_selectivity =
+          estimateSelectivityForPredicate(filter_injection->build_side_filter_predicate(),
+                                          filter_injection->right());
+      return left_selectivity * right_selectivity * build_side_filter_selectivity;
     }
     case P::PhysicalType::kHashJoin: {
       const P::HashJoinPtr &hash_join =
@@ -528,7 +536,6 @@ attribute_id StarSchemaSimpleCostModel::findCatalogRelationAttributeId(
   }
   return kInvalidAttributeID;
 }
-
 
 }  // namespace cost
 }  // namespace optimizer

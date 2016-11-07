@@ -126,6 +126,13 @@ class StarSchemaSimpleCostModel : public CostModel {
         physical_plan, attribute->id(), StatType::kMax);
   }
 
+  template <typename CppType>
+  bool findMinMaxStatsCppValue(
+      const physical::PhysicalPtr &physical_plan,
+      const expressions::AttributeReferencePtr &attribute,
+      CppType *min_cpp_value,
+      CppType *max_cpp_value);
+
  private:
   std::size_t estimateCardinalityForAggregate(
       const physical::AggregatePtr &physical_plan);
@@ -184,6 +191,46 @@ class StarSchemaSimpleCostModel : public CostModel {
 
   DISALLOW_COPY_AND_ASSIGN(StarSchemaSimpleCostModel);
 };
+
+template <typename CppType>
+bool StarSchemaSimpleCostModel::findMinMaxStatsCppValue(
+    const physical::PhysicalPtr &physical_plan,
+    const expressions::AttributeReferencePtr &attribute,
+    CppType *min_cpp_value,
+    CppType *max_cpp_value) {
+  const TypedValue min_value =
+      findMinValueStat(physical_plan, attribute);
+  const TypedValue max_value =
+      findMaxValueStat(physical_plan, attribute);
+  if (min_value.isNull() || max_value.isNull()) {
+    return false;
+  }
+
+  switch (attribute->getValueType().getTypeID()) {
+    case TypeID::kInt: {
+      *min_cpp_value = min_value.getLiteral<int>();
+      *max_cpp_value = max_value.getLiteral<int>();
+      return true;
+    }
+    case TypeID::kLong: {
+      *min_cpp_value = min_value.getLiteral<std::int64_t>();
+      *max_cpp_value = max_value.getLiteral<std::int64_t>();
+      return true;
+    }
+    case TypeID::kFloat: {
+      *min_cpp_value = min_value.getLiteral<float>();
+      *max_cpp_value = max_value.getLiteral<float>();
+      return true;
+    }
+    case TypeID::kDouble: {
+      *min_cpp_value = min_value.getLiteral<double>();
+      *max_cpp_value = max_value.getLiteral<double>();
+      return true;
+    }
+    default:
+      return false;
+  }
+}
 
 /** @} */
 
