@@ -20,7 +20,6 @@
 #ifndef QUICKSTEP_QUERY_OPTIMIZER_OPTIMIZER_HPP_
 #define QUICKSTEP_QUERY_OPTIMIZER_OPTIMIZER_HPP_
 
-#include "query_optimizer/PhysicalGenerator.hpp"
 #include "utility/Macros.hpp"
 
 namespace quickstep {
@@ -70,8 +69,6 @@ class Optimizer {
                            QueryHandle *query_handle);
 
  private:
-  PhysicalGenerator physical_generator_;
-
   DISALLOW_COPY_AND_ASSIGN(Optimizer);
 };
 

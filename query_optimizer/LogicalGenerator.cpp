@@ -29,6 +29,7 @@
 #include "query_optimizer/logical/Logical.hpp"
 #include "query_optimizer/resolver/Resolver.hpp"
 #include "query_optimizer/rules/CollapseProject.hpp"
+#include "query_optimizer/rules/EliminateSemiAntiJoinResidualPredicate.hpp"
 #include "query_optimizer/rules/GenerateJoins.hpp"
 #include "query_optimizer/rules/PushDownFilter.hpp"
 #include "query_optimizer/rules/PushDownSemiAntiJoin.hpp"
@@ -66,6 +67,7 @@ void LogicalGenerator::optimizePlan() {
   if (optimizer_context_->has_nested_queries()) {
     rules.emplace_back(new UnnestSubqueries(optimizer_context_));
   }
+  rules.emplace_back(new EliminateSemiAntiJoinResidualPredicate(optimizer_context_));
   rules.emplace_back(new PushDownSemiAntiJoin());
   rules.emplace_back(new PushDownFilter());
   rules.emplace_back(new GenerateJoins());

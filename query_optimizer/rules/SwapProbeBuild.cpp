@@ -30,6 +30,7 @@
 #include "query_optimizer/physical/TopLevelPlan.hpp"
 #include "query_optimizer/rules/Rule.hpp"
 
+#include "glog/logging.h"
 
 namespace quickstep {
 namespace optimizer {
@@ -39,20 +40,17 @@ P::PhysicalPtr SwapProbeBuild::applyToNode(const P::PhysicalPtr &input) {
 
   if (P::SomeHashJoin::MatchesWithConditionalCast(input, &hash_join)
       && hash_join->join_type() == P::HashJoin::JoinType::kInnerJoin) {
-    P::PhysicalPtr left = hash_join->left();
-    P::PhysicalPtr right = hash_join->right();
+    const P::PhysicalPtr &left = hash_join->left();
+    const P::PhysicalPtr &right = hash_join->right();
 
-    std::size_t left_cardinality = cost_model_->estimateCardinality(left);
-    std::size_t right_cardinality = cost_model_->estimateCardinality(right);
+    const std::size_t left_cardinality = cost_model_->estimateCardinality(left);
+    const std::size_t right_cardinality = cost_model_->estimateCardinality(right);
 
     if (right_cardinality > left_cardinality) {
-      std::vector<E::AttributeReferencePtr> left_join_attributes = hash_join->left_join_attributes();
-      std::vector<E::AttributeReferencePtr> right_join_attributes = hash_join->right_join_attributes();
-
       P::PhysicalPtr output = P::HashJoin::Create(right,
                                                   left,
-                                                  right_join_attributes,
-                                                  left_join_attributes,
+                                                  hash_join->right_join_attributes(),
+                                                  hash_join->left_join_attributes(),
                                                   hash_join->residual_predicate(),
                                                   hash_join->project_expressions(),
                                                   hash_join->join_type());
@@ -66,15 +64,9 @@ P::PhysicalPtr SwapProbeBuild::applyToNode(const P::PhysicalPtr &input) {
 }
 
 void SwapProbeBuild::init(const P::PhysicalPtr &input) {
-  if (cost_model_ == nullptr) {
-    P::TopLevelPlanPtr top_level;
-    if (P::SomeTopLevelPlan::MatchesWithConditionalCast(input, &top_level)) {
-      cost_model_.reset(new C::SimpleCostModel(top_level->shared_subplans()));
-    } else {
-      std::vector<P::PhysicalPtr> plans = {input};
-      cost_model_.reset(new C::SimpleCostModel(plans));
-    }
-  }
+  DCHECK(input->getPhysicalType() == P::PhysicalType::kTopLevelPlan);
+  cost_model_.reset(new C::SimpleCostModel(
+      std::static_pointer_cast<const P::TopLevelPlan>(input)->shared_subplans()));
 }
 
 }  // namespace optimizer
