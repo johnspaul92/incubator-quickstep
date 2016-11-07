@@ -50,13 +50,11 @@ namespace optimizer {
 namespace E = ::quickstep::optimizer::expressions;
 namespace P = ::quickstep::optimizer::physical;
 
-
 P::PhysicalPtr ReduceGroupByAttributes::apply(const P::PhysicalPtr &input) {
   DCHECK(input->getPhysicalType() == P::PhysicalType::kTopLevelPlan);
   cost_model_.reset(new cost::StarSchemaSimpleCostModel(
       std::static_pointer_cast<const P::TopLevelPlan>(input)->shared_subplans()));
 
-  // Check
   P::PhysicalPtr output = applyInternal(input);
   if (output != input) {
     output = PruneColumns().apply(output);
@@ -112,13 +110,16 @@ P::PhysicalPtr ReduceGroupByAttributes::applyToNode(const P::PhysicalPtr &input)
     }
 
     std::vector<AttributeInfo> attr_infos;
-    std::vector<const AttributeInfo *> attr_info_refs;
     for (const auto &attr : attributes) {
       attr_infos.emplace_back(attr,
                               cost_model_->impliesUniqueAttributes(table, {attr}),
                               !attr->getValueType().isVariableLength(),
                               attr->getValueType().maximumByteLength());
-      attr_info_refs.emplace_back(&attr_infos.back());
+    }
+
+    std::vector<const AttributeInfo *> attr_info_refs;
+    for (const auto &info : attr_infos) {
+      attr_info_refs.emplace_back(&info);
     }
     std::sort(attr_info_refs.begin(),
               attr_info_refs.end(),
@@ -130,7 +131,7 @@ P::PhysicalPtr ReduceGroupByAttributes::applyToNode(const P::PhysicalPtr &input)
       continue;
     }
 
-    const E::AttributeReferencePtr &key_attribute = best_candidate.attribute;
+    const E::AttributeReferencePtr key_attribute = best_candidate.attribute;
     hoisted_tables.emplace_back(table, key_attribute);
 
     for (const auto &attr : attributes) {

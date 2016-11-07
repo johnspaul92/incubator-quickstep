@@ -51,7 +51,7 @@ class ReduceGroupByAttributes : public Rule<physical::Physical> {
 
  private:
   struct AttributeInfo {
-    AttributeInfo(const expressions::AttributeReferencePtr attribute_in,
+    AttributeInfo(const expressions::AttributeReferencePtr &attribute_in,
                   const bool is_unique_in,
                   const bool is_fixed_length_in,
                   const std::size_t maximum_size_in)
