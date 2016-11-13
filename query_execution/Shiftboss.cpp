@@ -86,6 +86,12 @@ void Shiftboss::run() {
         CHECK(proto.ParseFromArray(tagged_message.message(), tagged_message.message_bytes()));
 
         shiftboss_index_ = proto.shiftboss_index();
+
+        // Forward this message to Workers regarding <shiftboss_index_>.
+        QueryExecutionUtil::BroadcastMessage(shiftboss_client_id_,
+                                             worker_addresses_,
+                                             move(annotated_message.tagged_message),
+                                             bus_);
         break;
       }
       case kQueryInitiateMessage: {
