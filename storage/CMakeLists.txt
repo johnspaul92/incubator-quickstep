@@ -625,6 +625,7 @@ if (ENABLE_DISTRIBUTED)
                         quickstep_storage_StorageManager
                         quickstep_threading_Thread
                         quickstep_utility_Macros
+                        quickstep_utility_NetworkUtil
                         ${GRPCPLUSPLUS_LIBRARIES})
 endif()
 
@@ -862,7 +863,7 @@ target_link_libraries(quickstep_storage_PartitionedHashTablePool
                       quickstep_storage_FastHashTableFactory
                       quickstep_storage_HashTableBase
                       quickstep_utility_Macros
-                      quickstep_utility_StringUtil)                    
+                      quickstep_utility_StringUtil)
 target_link_libraries(quickstep_storage_PreloaderThread
                       glog
                       quickstep_catalog_CatalogDatabase
